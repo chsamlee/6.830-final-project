@@ -2,9 +2,11 @@ package simpledb;
 
 import java.util.*;
 import java.io.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
- * Each instance of HeapPage stores data for one page of HeapFiles and 
+ * Each instance of HeapPage stores data for one page of HeapFiles and
  * implements the Page interface that is used by BufferPool.
  *
  * @see HeapFile
@@ -15,7 +17,7 @@ public class HeapPage implements Page {
 
     final HeapPageId pid;
     final TupleDesc td;
-    final byte header[];
+    public final byte header[];
     final Tuple tuples[];
     final int numSlots;
 
@@ -48,7 +50,7 @@ public class HeapPage implements Page {
         header = new byte[getHeaderSize()];
         for (int i=0; i<header.length; i++)
             header[i] = dis.readByte();
-        
+
         tuples = new Tuple[numSlots];
         try{
             // allocate and read the actual records of this page
@@ -65,25 +67,21 @@ public class HeapPage implements Page {
     /** Retrieve the number of tuples on this page.
         @return the number of tuples on this page
     */
-    private int getNumTuples() {        
-        // some code goes here
-        return 0;
-
+    private int getNumTuples() {
+        return (BufferPool.getPageSize() * 8) / (td.getSize() * 8 + 1);
     }
 
     /**
      * Computes the number of bytes in the header of a page in a HeapFile with each tuple occupying tupleSize bytes
      * @return the number of bytes in the header of a page in a HeapFile with each tuple occupying tupleSize bytes
      */
-    private int getHeaderSize() {        
-        
-        // some code goes here
-        return 0;
-                 
+    private int getHeaderSize() {
+        return numSlots / 8 + (numSlots % 8 == 0 ? 0 : 1);
     }
-    
+
     /** Return a view of this page before it was modified
         -- used by recovery */
+    @Override
     public HeapPage getBeforeImage(){
         try {
             byte[] oldDataRef = null;
@@ -99,7 +97,8 @@ public class HeapPage implements Page {
         }
         return null;
     }
-    
+
+    @Override
     public void setBeforeImage() {
         synchronized(oldDataLock)
         {
@@ -110,9 +109,9 @@ public class HeapPage implements Page {
     /**
      * @return the PageId associated with this page.
      */
+    @Override
     public HeapPageId getId() {
-    // some code goes here
-    throw new UnsupportedOperationException("implement this");
+        return pid;
     }
 
     /**
@@ -160,6 +159,7 @@ public class HeapPage implements Page {
      * @see #HeapPage
      * @return A byte array correspond to the bytes of this page.
      */
+    @Override
     public byte[] getPageData() {
         int len = BufferPool.getPageSize();
         ByteArrayOutputStream baos = new ByteArrayOutputStream(len);
@@ -196,7 +196,7 @@ public class HeapPage implements Page {
                 Field f = tuples[i].getField(j);
                 try {
                     f.serialize(dos);
-                
+
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -263,6 +263,7 @@ public class HeapPage implements Page {
      * Marks this page as dirty/not dirty and record that transaction
      * that did the dirtying
      */
+    @Override
     public void markDirty(boolean dirty, TransactionId tid) {
         // some code goes here
 	// not necessary for lab1
@@ -271,26 +272,42 @@ public class HeapPage implements Page {
     /**
      * Returns the tid of the transaction that last dirtied this page, or null if the page is not dirty
      */
+    @Override
     public TransactionId isDirty() {
         // some code goes here
 	// Not necessary for lab1
-        return null;      
+        return null;
     }
 
     /**
      * Returns the number of empty slots on this page.
      */
     public int getNumEmptySlots() {
-        // some code goes here
-        return 0;
+        int emptySlotsCount = 0;
+        int idx = 0;
+        for (byte b: header) {
+            int bInt = Byte.toUnsignedInt(b);
+            for (int i = 0; i < 8; i++) {
+                if ((bInt & 1) == 0) {
+                    emptySlotsCount++;
+                }
+                bInt >>= 1;
+            }
+            idx++;
+        }
+        return emptySlotsCount;
     }
 
     /**
      * Returns true if associated slot on this page is filled.
      */
     public boolean isSlotUsed(int i) {
-        // some code goes here
-        return false;
+        int arrOffset = i / 8;
+        int bitOffset = i % 8;
+
+        int headerByte = Byte.toUnsignedInt(header[arrOffset]);
+        int bitMask = 1 << bitOffset;
+        return ((headerByte & bitMask) == bitMask);
     }
 
     /**
@@ -306,8 +323,10 @@ public class HeapPage implements Page {
      * (note that this iterator shouldn't return tuples in empty slots!)
      */
     public Iterator<Tuple> iterator() {
-        // some code goes here
-        return null;
+        return IntStream.range(0, numSlots)
+                        .filter(index -> isSlotUsed(index))
+                        .mapToObj(index -> tuples[index])
+                        .iterator();
     }
 
 }

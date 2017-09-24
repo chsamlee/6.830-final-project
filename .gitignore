@@ -1,0 +1,6 @@
+log
+bin/
+dist/
+*.iml
+.idea/
+src/simple-db-hw.iml

@@ -1,0 +1,20 @@
+Design Decisions
+There is no major design decisions in this lab that is not specified in lab
+instructions.
+
+API Changes
+None, but I modified AbstractDbFileIterator's internals so that the iterator
+will fail when calling next() with the iterator unopened/closed.
+
+Missing or Incomplete Elements
+I may be missing a few null checks, but I have tried my best to make sure
+that null cases are handled.
+
+Hours Spent
+Around 9? Didn't really keep count.
+
+Difficult/confusing Parts
+Sometimes the documentation isn't very clear on what a function should do,
+so I have to look at other functions/tests calling that function to figure
+the functionality out myself. In the case of Tuple.resetTupleDesc, the
+function is not called by others so I have to guess.

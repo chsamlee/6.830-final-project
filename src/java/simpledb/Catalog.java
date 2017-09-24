@@ -13,17 +13,37 @@ import java.util.concurrent.ConcurrentHashMap;
  * For now, this is a stub catalog that must be populated with tables by a
  * user program before it can be used -- eventually, this should be converted
  * to a catalog that reads a catalog table from disk.
- * 
+ *
  * @Threadsafe
  */
 public class Catalog {
+
+    /**
+     * A helper class for grouping information on a table.
+     */
+    private class TableInfo {
+
+        public final DbFile file;
+        public final String name;
+        public final String pkey;
+
+        public TableInfo(DbFile file, String name, String pkey) {
+            this.file = file;
+            this.name = name;
+            this.pkey = pkey;
+        }
+    }
+
+    private Map<Integer, TableInfo> tables;
+    private Map<String, Integer> nameToId;
 
     /**
      * Constructor.
      * Creates a new, empty catalog.
      */
     public Catalog() {
-        // some code goes here
+        tables = new HashMap<>();
+        nameToId = new HashMap<>();
     }
 
     /**
@@ -36,7 +56,16 @@ public class Catalog {
      * @param pkeyField the name of the primary key field
      */
     public void addTable(DbFile file, String name, String pkeyField) {
-        // some code goes here
+        new TableInfo(file, name, pkeyField);
+        if (nameToId.containsKey(name)) {
+            // remove existing table with same name
+            int tableId = nameToId.remove(name);
+            tables.remove(tableId);
+        }
+        int tableId = file.getId();
+        TableInfo tableInfo = new TableInfo(file, name, pkeyField);
+        tables.put(tableId, tableInfo);
+        nameToId.put(name, tableId);
     }
 
     public void addTable(DbFile file, String name) {
@@ -59,8 +88,10 @@ public class Catalog {
      * @throws NoSuchElementException if the table doesn't exist
      */
     public int getTableId(String name) throws NoSuchElementException {
-        // some code goes here
-        return 0;
+        if (!nameToId.containsKey(name)) {
+            throw new NoSuchElementException();
+        }
+        return nameToId.get(name);
     }
 
     /**
@@ -70,8 +101,7 @@ public class Catalog {
      * @throws NoSuchElementException if the table doesn't exist
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
-        // some code goes here
-        return null;
+        return getDatabaseFile(tableid).getTupleDesc();
     }
 
     /**
@@ -81,30 +111,36 @@ public class Catalog {
      *     function passed to addTable
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
-        // some code goes here
-        return null;
+        if (!tables.containsKey(tableid)) {
+            throw new NoSuchElementException();
+        }
+        return tables.get(tableid).file;
     }
 
     public String getPrimaryKey(int tableid) {
-        // some code goes here
-        return null;
+        if (!tables.containsKey(tableid)) {
+            throw new NoSuchElementException();
+        }
+        return tables.get(tableid).pkey;
     }
 
     public Iterator<Integer> tableIdIterator() {
-        // some code goes here
-        return null;
+        return tables.keySet().iterator();
     }
 
     public String getTableName(int id) {
-        // some code goes here
-        return null;
+        if (!tables.containsKey(id)) {
+            throw new NoSuchElementException();
+        }
+        return tables.get(id).name;
     }
-    
+
     /** Delete all tables from the catalog */
     public void clear() {
-        // some code goes here
+        tables.clear();
+        nameToId.clear();
     }
-    
+
     /**
      * Reads the schema from a file and creates the appropriate tables in the database.
      * @param catalogFile
@@ -114,7 +150,7 @@ public class Catalog {
         String baseFolder=new File(new File(catalogFile).getAbsolutePath()).getParent();
         try {
             BufferedReader br = new BufferedReader(new FileReader(new File(catalogFile)));
-            
+
             while ((line = br.readLine()) != null) {
                 //assume line is of the format name (field type, field type, ...)
                 String name = line.substring(0, line.indexOf("(")).trim();
