@@ -18,7 +18,7 @@ public class StringField implements Field {
 
 	/**
 	 * Constructor.
-	 * 
+	 *
 	 * @param s
 	 *            The value of this field.
 	 * @param maxSize
@@ -49,7 +49,7 @@ public class StringField implements Field {
 	 * Write this string to dos. Always writes maxSize + 4 bytes to the passed
 	 * in dos. First four bytes are string length, next bytes are string, with
 	 * remainder padded with 0 to maxSize.
-	 * 
+	 *
 	 * @param dos
 	 *            Where the string is written
 	 */
@@ -69,7 +69,7 @@ public class StringField implements Field {
 	/**
 	 * Compare the specified field to the value of this Field. Return semantics
 	 * are as specified by Field.compare
-	 * 
+	 *
 	 * @throws IllegalCastException
 	 *             if val is not a StringField
 	 * @see Field#compare
@@ -109,7 +109,6 @@ public class StringField implements Field {
 	 * @return the Type for this Field
 	 */
 	public Type getType() {
-
 		return Type.STRING_TYPE;
 	}
 }

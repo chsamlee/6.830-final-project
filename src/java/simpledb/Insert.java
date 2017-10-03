@@ -1,5 +1,8 @@
 package simpledb;
 
+import javax.xml.crypto.Data;
+import java.io.IOException;
+
 /**
  * Inserts tuples read from the child operator into the tableId specified in the
  * constructor
@@ -7,6 +10,12 @@ package simpledb;
 public class Insert extends Operator {
 
     private static final long serialVersionUID = 1L;
+
+    private TransactionId tid;
+    private int tableId;
+    private OpIterator childIter;
+    private TupleDesc tupleDesc = new TupleDesc(new Type[]{Type.INT_TYPE});
+    private boolean finished = false;
 
     /**
      * Constructor.
@@ -23,24 +32,27 @@ public class Insert extends Operator {
      */
     public Insert(TransactionId t, OpIterator child, int tableId)
             throws DbException {
-        // some code goes here
+        this.tid = t;
+        this.tableId = tableId;
+        this.childIter = child;
     }
 
     public TupleDesc getTupleDesc() {
-        // some code goes here
-        return null;
+        return tupleDesc;
     }
 
     public void open() throws DbException, TransactionAbortedException {
-        // some code goes here
+        super.open();
+        childIter.open();
     }
 
     public void close() {
-        // some code goes here
+        childIter.close();
+        super.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
-        // some code goes here
+        // we don't need to rewind childIter since we don't want to re-insert
     }
 
     /**
@@ -57,18 +69,33 @@ public class Insert extends Operator {
      * @see BufferPool#insertTuple
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
-        // some code goes here
+        if (!finished) {
+            int insertCount = 0;
+            while (childIter.hasNext()) {
+                Tuple tuple = childIter.next();
+                try {
+                    Database.getBufferPool().insertTuple(tid, tableId, tuple);
+                } catch (IOException e) {
+                    throw new DbException("I/O error when inserting tuple");
+                }
+                insertCount++;
+            }
+            finished = true;
+            Tuple summaryTuple = new Tuple(tupleDesc);
+            summaryTuple.setField(0, new IntField(insertCount));
+            return summaryTuple;
+        }
         return null;
     }
 
     @Override
     public OpIterator[] getChildren() {
-        // some code goes here
-        return null;
+        return new OpIterator[]{childIter};
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
-        // some code goes here
+        childIter = children[0];
     }
+
 }

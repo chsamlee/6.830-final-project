@@ -1,11 +1,20 @@
 package simpledb;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 /**
  * Knows how to compute some aggregate over a set of StringFields.
  */
 public class StringAggregator implements Aggregator {
 
     private static final long serialVersionUID = 1L;
+    private static final Field NO_GROUPING_FIELD = null;
+
+    private final int gbField;
+    private final Type gbFieldType;
+    private final Map<Field, AggregateOpAccumulator> aMap;
 
     /**
      * Aggregate constructor
@@ -17,7 +26,12 @@ public class StringAggregator implements Aggregator {
      */
 
     public StringAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
-        // some code goes here
+        if (what != Op.COUNT) {
+            throw new IllegalArgumentException("Only COUNT operator is supported");
+        }
+        this.gbField = gbfield;
+        this.gbFieldType = gbfieldtype;
+        this.aMap = new HashMap<>();
     }
 
     /**
@@ -25,7 +39,11 @@ public class StringAggregator implements Aggregator {
      * @param tup the Tuple containing an aggregate field and a group-by field
      */
     public void mergeTupleIntoGroup(Tuple tup) {
-        // some code goes here
+        Field tupGbField = (gbField == Aggregator.NO_GROUPING ?
+                            NO_GROUPING_FIELD :
+                            tup.getField(gbField));
+        aMap.putIfAbsent(tupGbField, new AggregateOpAccumulator.AggregateCountAccumulator());
+        aMap.get(tupGbField).add(null);  // we can get away with null since the arg isn't used
     }
 
     /**
@@ -37,8 +55,13 @@ public class StringAggregator implements Aggregator {
      *   aggregate specified in the constructor.
      */
     public OpIterator iterator() {
-        // some code goes here
-        throw new UnsupportedOperationException("please implement me for lab2");
+        Map<Field, Field> aggregates = aMap.entrySet()
+                                           .stream()
+                                           .collect(Collectors.toMap(
+                                                   Map.Entry::getKey,
+                                                   e -> e.getValue().aggregate()
+                                           ));
+        return new AggregatorIterator(aggregates, gbFieldType, Type.INT_TYPE);
     }
 
 }

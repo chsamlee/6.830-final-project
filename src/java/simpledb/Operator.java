@@ -14,7 +14,7 @@ public abstract class Operator implements OpIterator {
     public boolean hasNext() throws DbException, TransactionAbortedException {
         if (!this.open)
             throw new IllegalStateException("Operator not yet open");
-        
+
         if (next == null)
             next = fetchNext();
         return next != null;
@@ -22,6 +22,8 @@ public abstract class Operator implements OpIterator {
 
     public Tuple next() throws DbException, TransactionAbortedException,
             NoSuchElementException {
+        if (!this.open)
+            throw new IllegalStateException("Operator not open");
         if (next == null) {
             next = fetchNext();
             if (next == null)
@@ -37,7 +39,7 @@ public abstract class Operator implements OpIterator {
      * Returns the next Tuple in the iterator, or null if the iteration is
      * finished. Operator uses this method to implement both <code>next</code>
      * and <code>hasNext</code>.
-     * 
+     *
      * @return the next Tuple in the iterator, or null if the iteration is
      *         finished.
      */
@@ -74,8 +76,8 @@ public abstract class Operator implements OpIterator {
      * Set the children(child) of this operator. If the operator has only one
      * child, children[0] should be used. If the operator is a join, children[0]
      * and children[1] should be used.
-     * 
-     * 
+     *
+     *
      * @param children
      *            the DbIterators which are to be set as the children(child) of
      *            this operator

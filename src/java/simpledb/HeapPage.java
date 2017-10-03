@@ -24,6 +24,8 @@ public class HeapPage implements Page {
     byte[] oldData;
     private final Byte oldDataLock=new Byte((byte)0);
 
+    private TransactionId dirtyTransId;
+
     /**
      * Create a HeapPage from a set of bytes of data read from disk.
      * The format of a HeapPage is a set of header bytes indicating
@@ -243,8 +245,14 @@ public class HeapPage implements Page {
      * @param t The tuple to delete
      */
     public void deleteTuple(Tuple t) throws DbException {
-        // some code goes here
-        // not necessary for lab1
+        RecordId rid = t.getRecordId();
+        if (!pid.equals(rid.getPageId())) {
+            throw new DbException("The tuple is not on this page");
+        }
+        if (!isSlotUsed(rid.getTupleNumber())) {
+            throw new DbException("The tuple slot is already empty");
+        }
+        markSlotUsed(rid.getTupleNumber(), false);
     }
 
     /**
@@ -255,8 +263,35 @@ public class HeapPage implements Page {
      * @param t The tuple to add.
      */
     public void insertTuple(Tuple t) throws DbException {
-        // some code goes here
-        // not necessary for lab1
+        if (!td.equals(t.getTupleDesc())) {
+            throw new DbException("Tuple description does not match");
+        }
+        int firstEmptySlot = firstEmptySlot();
+        if (firstEmptySlot == -1) {
+            throw new DbException("This page is full");
+        }
+        tuples[firstEmptySlot] = t;
+        t.setRecordId(new RecordId(pid, firstEmptySlot));
+        markSlotUsed(firstEmptySlot, true);
+    }
+
+    /**
+     * Returns the index of first empty slot, or -1 if there is none.
+     */
+    private int firstEmptySlot() {
+        for (int arrOffset = 0; arrOffset < header.length; arrOffset++) {
+            int bInt = Byte.toUnsignedInt(header[arrOffset]);
+            if (bInt == 255) {
+                continue;
+            }
+            for (int bitOffset = 0; bitOffset < 8; bitOffset++) {
+                int bitMask = 1 << bitOffset;
+                if ((bInt & bitMask) == 0) {
+                    return arrOffset * 8 +bitOffset;
+                }
+            }
+        }
+        return -1;
     }
 
     /**
@@ -265,8 +300,7 @@ public class HeapPage implements Page {
      */
     @Override
     public void markDirty(boolean dirty, TransactionId tid) {
-        // some code goes here
-	// not necessary for lab1
+        dirtyTransId = (dirty ? tid : null);
     }
 
     /**
@@ -274,9 +308,7 @@ public class HeapPage implements Page {
      */
     @Override
     public TransactionId isDirty() {
-        // some code goes here
-	// Not necessary for lab1
-        return null;
+        return dirtyTransId;
     }
 
     /**
@@ -314,8 +346,18 @@ public class HeapPage implements Page {
      * Abstraction to fill or clear a slot on this page.
      */
     private void markSlotUsed(int i, boolean value) {
-        // some code goes here
-        // not necessary for lab1
+        int arrOffset = i / 8;
+        int bitOffset = i % 8;
+
+        // set the corresponding bit to 1 or 0
+        int headerByte = Byte.toUnsignedInt(header[arrOffset]);
+        int bitMask = 1 << bitOffset;
+        if (value) {
+            headerByte = headerByte | bitMask;
+        } else {
+            headerByte = headerByte & (~bitMask);
+        }
+        header[arrOffset] = (byte) headerByte;
     }
 
     /**
@@ -324,7 +366,7 @@ public class HeapPage implements Page {
      */
     public Iterator<Tuple> iterator() {
         return IntStream.range(0, numSlots)
-                        .filter(index -> isSlotUsed(index))
+                        .filter(this::isSlotUsed)
                         .mapToObj(index -> tuples[index])
                         .iterator();
     }

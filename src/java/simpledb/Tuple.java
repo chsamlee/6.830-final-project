@@ -78,6 +78,18 @@ public class Tuple implements Serializable {
         return fields[i];
     }
 
+    /** Merge two tuples. */
+    public static Tuple merge(Tuple t1, Tuple t2) {
+        Tuple mergedTuple = new Tuple(TupleDesc.merge(t1.getTupleDesc(), t2.getTupleDesc()));
+        for (int i = 0; i < t1.tupleDesc.numFields(); i++) {
+            mergedTuple.setField(i, t1.getField(i));
+        }
+        for (int i = 0; i < t2.tupleDesc.numFields(); i++) {
+            mergedTuple.setField(i + t1.tupleDesc.numFields(), t2.getField(i));
+        }
+        return mergedTuple;
+    }
+
     /**
      * Returns the contents of this Tuple as a string. Note that to pass the
      * system tests, the format needs to be as follows:

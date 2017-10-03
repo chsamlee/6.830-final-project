@@ -214,7 +214,15 @@ public class TupleDesc implements Serializable {
             return false;
         }
         TupleDesc other = (TupleDesc) o;
-        return Arrays.equals(tdItems, other.tdItems);
+        if (tdItems.length != other.tdItems.length) {
+            return false;
+        }
+        for (int i = 0; i < tdItems.length; i++) {
+            if (tdItems[i].fieldType != other.tdItems[i].fieldType) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

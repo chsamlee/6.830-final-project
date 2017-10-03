@@ -1,0 +1,10 @@
+I chose LRU as the page eviction policy. Compared to evicting a random page, LRU is easier to debug (since it is deterministic) and is likely to have better performance. It is possible that we can further improve performance by specifying that some pages shouldn't be evicted, but it adds too much complexity to the system.
+
+I also implemented a block nested-loop join, which is faster than simple nested-loop join due to fewer I/Os. However, the implementation reads in a set number of tuples at a time instead of a set number of pages, which results in higher memory consumption.
+
+Existing API is not changed, but I added a static function Tuple.merge for convenience.
+
+The code currently assumes that aggregated results are always integers, which is not true for SUM_COUNT. We will have to add an additional field type and tweak some aggregator-related classes to make SUM_COUNT aggregation work.
+
+This lab took around 12 hours. I found section 2.2 difficult to start because of the huge number of classes and the instructions are relatively lacking.
+

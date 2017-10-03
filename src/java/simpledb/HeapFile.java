@@ -69,15 +69,15 @@ public class HeapFile implements DbFile {
         if (pid.getTableId() != getId()) {
             throw new IllegalArgumentException("Incorrect table");
         }
-        int PAGE_SIZE = BufferPool.getPageSize();
         if (pid.getPageNumber() >= numPages()) {
             throw new IllegalArgumentException("Invalid page number");
         }
+        int PAGE_SIZE = BufferPool.getPageSize();
         int offset = pid.getPageNumber() * PAGE_SIZE;
         byte[] data = new byte[PAGE_SIZE];
         HeapPageId hpid = new HeapPageId(getId(), pid.getPageNumber());
         try {
-            RandomAccessFile raf = new RandomAccessFile(file, "rw");
+            RandomAccessFile raf = new RandomAccessFile(file, "r");
             raf.seek(offset);
             raf.readFully(data);
             raf.close();
@@ -91,8 +91,21 @@ public class HeapFile implements DbFile {
     // see DbFile.java for javadocs
     @Override
     public void writePage(Page page) throws IOException {
-        // some code goes here
-        // not necessary for lab1
+        HeapPage hPage = (HeapPage) page;
+        HeapPageId pid = hPage.getId();
+        if (pid.getTableId() != getId()) {
+            throw new IllegalArgumentException("Incorrect table");
+        }
+        if (pid.getPageNumber() > numPages()) {
+            throw new IllegalArgumentException("Invalid page number");
+        }
+        int PAGE_SIZE = BufferPool.getPageSize();
+        int offset = pid.getPageNumber() * PAGE_SIZE;
+        byte[] data = hPage.getPageData();
+        RandomAccessFile raf = new RandomAccessFile(file, "rw");
+        raf.seek(offset);
+        raf.write(data);
+        raf.close();
     }
 
     /**
@@ -106,18 +119,52 @@ public class HeapFile implements DbFile {
     @Override
     public ArrayList<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        return null;
-        // not necessary for lab1
+        // first try to insert the tuple in an existing page
+        int pageCount = numPages();
+        for (int pageNumber = 0; pageNumber < pageCount; pageNumber++) {
+            HeapPageId pid = new HeapPageId(getId(), pageNumber);
+            HeapPage page = (HeapPage) Database.getBufferPool()
+                                               .getPage(tid, pid, Permissions.READ_WRITE);
+            if (page.getNumEmptySlots() > 0) {
+                page.insertTuple(t);
+                return new ArrayList<>(Collections.singletonList(page));
+            }
+        }
+        // all pages are full, create a new page
+        HeapPageId pid = new HeapPageId(getId(), pageCount);
+        HeapPage newPage = new HeapPage(pid, HeapPage.createEmptyPageData());
+        writePage(newPage);
+        // access the new page via BufferPool
+        HeapPage page = (HeapPage) Database.getBufferPool()
+                                           .getPage(tid, pid, Permissions.READ_WRITE);
+        page.insertTuple(t);
+        return new ArrayList<>(Collections.singletonList(page));
+        /*
+        // old code
+        RandomAccessFile raf = new RandomAccessFile(file, "rw");
+        raf.setLength(raf.length() + BufferPool.getPageSize());
+        raf.close();
+        // access the new page via BufferPool
+        HeapPageId pid = new HeapPageId(getId(), pageCount);
+        HeapPage page = (HeapPage) Database.getBufferPool()
+                                           .getPage(tid, pid, Permissions.READ_WRITE);
+        page.insertTuple(t);
+        return new ArrayList<>(Collections.singletonList(page));
+         */
     }
 
     // see DbFile.java for javadocs
     @Override
     public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
-        // some code goes here
-        return null;
-        // not necessary for lab1
+        PageId pid = t.getRecordId().getPageId();
+        if (pid.getTableId() != getId()) {
+            throw new DbException("The tuple is not on this file");
+        }
+        HeapPage page = (HeapPage) Database.getBufferPool()
+                                           .getPage(tid, pid, Permissions.READ_WRITE);
+        page.deleteTuple(t);
+        return new ArrayList<>(Collections.singletonList(page));
     }
 
     // see DbFile.java for javadocs
