@@ -16,7 +16,7 @@ public class JoinOptimizer {
 
     /**
      * Constructor
-     * 
+     *
      * @param p
      *            the logical plan being optimized
      * @param joins
@@ -34,7 +34,7 @@ public class JoinOptimizer {
      * inner/outer here -- because OpIterator's don't provide any cardinality
      * estimates, and stats only has information about the base tables. For this
      * reason, the plan1
-     * 
+     *
      * @param lj
      *            The join being considered
      * @param plan1
@@ -76,14 +76,14 @@ public class JoinOptimizer {
 
     /**
      * Estimate the cost of a join.
-     * 
+     *
      * The cost of the join should be calculated based on the join algorithm (or
      * algorithms) that you implemented for Lab 2. It should be a function of
      * the amount of data that must be read over the course of the query, as
      * well as the number of CPU opertions performed by your join. Assume that
      * the cost of a single predicate application is roughly 1.
-     * 
-     * 
+     *
+     *
      * @param j
      *            A LogicalJoinNode representing the join operation being
      *            performed.
@@ -107,18 +107,17 @@ public class JoinOptimizer {
             // You do not need to implement proper support for these for Lab 3.
             return card1 + cost1 + cost2;
         } else {
-            // Insert your code here.
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return -1.0;
+            return cost1 + card1 * cost2 + card1 * card2;
         }
     }
 
     /**
      * Estimate the cardinality of a join. The cardinality of a join is the
      * number of tuples produced by the join.
-     * 
+     *
      * @param j
      *            A LogicalJoinNode representing the join operation being
      *            performed.
@@ -155,48 +154,25 @@ public class JoinOptimizer {
             String field2PureName, int card1, int card2, boolean t1pkey,
             boolean t2pkey, Map<String, TableStats> stats,
             Map<String, Integer> tableAliasToId) {
-        int card = 1;
-        // some code goes here
-        return card <= 0 ? 1 : card;
-    }
 
-    /**
-     * Helper method to enumerate all of the subsets of a given size of a
-     * specified vector.
-     * 
-     * @param v
-     *            The vector whose subsets are desired
-     * @param size
-     *            The size of the subsets of interest
-     * @return a set of all subsets of the specified size
-     */
-    @SuppressWarnings("unchecked")
-    public <T> Set<Set<T>> enumerateSubsets(Vector<T> v, int size) {
-        Set<Set<T>> els = new HashSet<Set<T>>();
-        els.add(new HashSet<T>());
-        // Iterator<Set> it;
-        // long start = System.currentTimeMillis();
-
-        for (int i = 0; i < size; i++) {
-            Set<Set<T>> newels = new HashSet<Set<T>>();
-            for (Set<T> s : els) {
-                for (T t : v) {
-                    Set<T> news = (Set<T>) (((HashSet<T>) s).clone());
-                    if (news.add(t))
-                        newels.add(news);
-                }
+        if (joinOp == Predicate.Op.EQUALS) {
+            if (t1pkey) {
+                return card2;
             }
-            els = newels;
+            else if (t2pkey) {
+                return card1;
+            }
+            else {
+                return Math.max(card1, card2);
+            }
         }
-
-        return els;
-
+        return (int) (0.7 * card1 * card2);
     }
 
     /**
      * Compute a logical, reasonably efficient join on the specified tables. See
      * PS4 for hints on how this should be implemented.
-     * 
+     *
      * @param stats
      *            Statistics for each table involved in the join, referenced by
      *            base table names, not alias
@@ -217,216 +193,186 @@ public class JoinOptimizer {
             HashMap<String, TableStats> stats,
             HashMap<String, Double> filterSelectivities, boolean explain)
             throws ParsingException {
-        //Not necessary for labs 1--3
-
-        // some code goes here
-        //Replace the following
-        return joins;
+        // build a bidirectional mapping between tables and bits
+        Map<String, Integer> tablesToBits = new HashMap<>();
+        Map<Integer, String> bitsToTables = new HashMap<>();
+        for (LogicalJoinNode j: joins) {
+            for (String alias: new String[]{j.t1Alias, j.t2Alias}) {
+                if (alias != null && !tablesToBits.containsKey(alias)) {
+                    int bit = tablesToBits.size();
+                    tablesToBits.put(alias, bit);
+                    bitsToTables.put(bit, alias);
+                }
+            }
+        }
+        // base case: 1 table
+        Map<Long, CostCard> planCache = new HashMap<>();
+        for (int i = 0; i < tablesToBits.size(); i++) {
+            String table = bitsToTables.get(i);
+            double cost = stats.get(table).estimateScanCost();
+            int card = stats.get(table).estimateTableCardinality(filterSelectivities.get(table));
+            CostCard cc = new CostCard(cost, card, new Vector<>());
+            planCache.put(1L << i, cc);
+        }
+        // use dynamic programming to compute joins with more tables
+        final int TABLE_COUNT = tablesToBits.size();
+        for (int k = 2; k <= TABLE_COUNT; k++) {
+            Iterator<Long> keys = kOneBitNumbers(TABLE_COUNT, k);
+            while (keys.hasNext()) {
+                long key = keys.next();
+                CostCard cc = CostCard.IMPOSSIBLE;
+                for (int i = 0; i <= TABLE_COUNT; i++) {
+                    long bitMask = 1L << i;
+                    long subsetKey = ~(~key | bitMask); // set bit i to 0
+                    if (subsetKey != key && planCache.containsKey(subsetKey)) {
+                        // bit i of key is equal to 1 - actually a subset
+                        // planCache contains subsetKey - possible to join the subset together
+                        cc = findBestPlan(subsetKey, i, tablesToBits, bitsToTables, planCache, stats, cc);
+                    }
+                }
+                if (cc != CostCard.IMPOSSIBLE) {
+                    planCache.put(key, cc);
+                }
+            }
+        }
+        Vector<LogicalJoinNode> plan = planCache.get((1L << TABLE_COUNT) - 1).plan;
+        if (explain) {
+            printJoins(plan, planCache, tablesToBits, stats, filterSelectivities);
+        }
+        return plan;
     }
 
-    // ===================== Private Methods =================================
+    // ====== Helper methods for orderJoins ======
 
     /**
-     * This is a helper method that computes the cost and cardinality of joining
-     * joinToRemove to joinSet (joinSet should contain joinToRemove), given that
-     * all of the subsets of size joinSet.size() - 1 have already been computed
-     * and stored in PlanCache pc.
-     * 
-     * @param stats
-     *            table stats for all of the tables, referenced by table names
-     *            rather than alias (see {@link #orderJoins})
-     * @param filterSelectivities
-     *            the selectivities of the filters over each of the tables
-     *            (where tables are indentified by their alias or name if no
-     *            alias is given)
-     * @param joinToRemove
-     *            the join to remove from joinSet
-     * @param joinSet
-     *            the set of joins being considered
-     * @param bestCostSoFar
-     *            the best way to join joinSet so far (minimum of previous
-     *            invocations of computeCostAndCardOfSubplan for this joinSet,
-     *            from returned CostCard)
-     * @param pc
-     *            the PlanCache for this join; should have subplans for all
-     *            plans of size joinSet.size()-1
-     * @return A {@link CostCard} objects desribing the cost, cardinality,
-     *         optimal subplan
-     * @throws ParsingException
-     *             when stats, filterSelectivities, or pc object is missing
-     *             tables involved in join
+     * Returns an iterator of n-bit (n < 64) numbers with k bits equal to 1.
      */
+    private Iterator<Long> kOneBitNumbers(int n, int k) {
+        // use an array to represent bits with value 1 in increasing order
+        long[] oneBits = new long[k];
+        for (int i = 0; i < k; i++) {
+            oneBits[i] = n - k + i;
+        }
+
+        return new Iterator<Long>() {
+            long lastReturned = 0;
+
+            @Override
+            public boolean hasNext() {
+                return lastReturned != (1 << k) - 1;
+            }
+
+            @Override
+            public Long next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                if (lastReturned != 0) {
+                    // find the right bit to decrement
+                    int decrBit = -1;
+                    for (int i = 0; i < k; i++) {
+                        if (oneBits[i] != i) {
+                            decrBit = i;
+                            break;
+                        }
+                    }
+                    // decrement all lower bits
+                    oneBits[decrBit]--;
+                    for (int j = 0; j < decrBit; j++) {
+                        oneBits[j] = oneBits[decrBit] - (decrBit - j);
+                    }
+                }
+                // construct the number from the bits
+                long next = 0;
+                for (long i: oneBits) {
+                    next |= (1 << i);
+                }
+                lastReturned = next;
+                return next;
+            }
+        };
+    }
+
+    /**
+     * Find the optimal way to join newTableBit to subplan
+     * @param oldTables [long] existing tables that are already joined
+     * @param newTableBit [int] bit of the table
+     * @param tablesToBits [map] mapping from table names to bits
+     * @param bitsToTables [ma[] mapping from bits to table names
+     * @param cache [map] previously-computed best subplans
+     * @param stats [map] table stats
+     * @param currentBestPlan [CostCard] lowest-cost plan for joining oldTables and newTableBit so far
+     * @return CostCard instance corresponding to lowest-cost plan (can be the current plan)
+     */
+    // include currentBestPlan so we don't have to unnecessarily construct the plan vector
     @SuppressWarnings("unchecked")
-    private CostCard computeCostAndCardOfSubplan(
+    private CostCard findBestPlan(
+            long oldTables,
+            int newTableBit,
+            Map<String, Integer> tablesToBits,
+            Map<Integer, String> bitsToTables,
+            Map<Long, CostCard> cache,
             HashMap<String, TableStats> stats,
-            HashMap<String, Double> filterSelectivities,
-            LogicalJoinNode joinToRemove, Set<LogicalJoinNode> joinSet,
-            double bestCostSoFar, PlanCache pc) throws ParsingException {
-
-        LogicalJoinNode j = joinToRemove;
-
-        Vector<LogicalJoinNode> prevBest;
-
-        if (this.p.getTableId(j.t1Alias) == null)
-            throw new ParsingException("Unknown table " + j.t1Alias);
-        if (this.p.getTableId(j.t2Alias) == null)
-            throw new ParsingException("Unknown table " + j.t2Alias);
-
-        String table1Name = Database.getCatalog().getTableName(
-                this.p.getTableId(j.t1Alias));
-        String table2Name = Database.getCatalog().getTableName(
-                this.p.getTableId(j.t2Alias));
-        String table1Alias = j.t1Alias;
-        String table2Alias = j.t2Alias;
-
-        Set<LogicalJoinNode> news = (Set<LogicalJoinNode>) ((HashSet<LogicalJoinNode>) joinSet)
-                .clone();
-        news.remove(j);
-
-        double t1cost, t2cost;
-        int t1card, t2card;
-        boolean leftPkey, rightPkey;
-
-        if (news.isEmpty()) { // base case -- both are base relations
-            prevBest = new Vector<LogicalJoinNode>();
-            t1cost = stats.get(table1Name).estimateScanCost();
-            t1card = stats.get(table1Name).estimateTableCardinality(
-                    filterSelectivities.get(j.t1Alias));
-            leftPkey = isPkey(j.t1Alias, j.f1PureName);
-
-            t2cost = table2Alias == null ? 0 : stats.get(table2Name)
-                    .estimateScanCost();
-            t2card = table2Alias == null ? 0 : stats.get(table2Name)
-                    .estimateTableCardinality(
-                            filterSelectivities.get(j.t2Alias));
-            rightPkey = table2Alias == null ? false : isPkey(table2Alias,
-                    j.f2PureName);
-        } else {
-            // news is not empty -- figure best way to join j to news
-            prevBest = pc.getOrder(news);
-
-            // possible that we have not cached an answer, if subset
-            // includes a cross product
-            if (prevBest == null) {
-                return null;
-            }
-
-            double prevBestCost = pc.getCost(news);
-            int bestCard = pc.getCard(news);
-
-            // estimate cost of right subtree
-            if (doesJoin(prevBest, table1Alias)) { // j.t1 is in prevBest
-                t1cost = prevBestCost; // left side just has cost of whatever
-                                       // left
-                // subtree is
-                t1card = bestCard;
-                leftPkey = hasPkey(prevBest);
-
-                t2cost = j.t2Alias == null ? 0 : stats.get(table2Name)
-                        .estimateScanCost();
-                t2card = j.t2Alias == null ? 0 : stats.get(table2Name)
-                        .estimateTableCardinality(
-                                filterSelectivities.get(j.t2Alias));
-                rightPkey = j.t2Alias == null ? false : isPkey(j.t2Alias,
-                        j.f2PureName);
-            } else if (doesJoin(prevBest, j.t2Alias)) { // j.t2 is in prevbest
-                                                        // (both
-                // shouldn't be)
-                t2cost = prevBestCost; // left side just has cost of whatever
-                                       // left
-                // subtree is
-                t2card = bestCard;
-                rightPkey = hasPkey(prevBest);
-                t1cost = stats.get(table1Name).estimateScanCost();
-                t1card = stats.get(table1Name).estimateTableCardinality(
-                        filterSelectivities.get(j.t1Alias));
-                leftPkey = isPkey(j.t1Alias, j.f1PureName);
-
-            } else {
-                // don't consider this plan if one of j.t1 or j.t2
-                // isn't a table joined in prevBest (cross product)
-                return null;
+            CostCard currentBestPlan
+    ) {
+        CostCard bestPlan = currentBestPlan;
+        for (LogicalJoinNode j: joins) {
+            if (j.t1Alias != null && j.t2Alias != null) {
+                int b1 = tablesToBits.get(j.t1Alias);
+                int b2 = tablesToBits.get(j.t2Alias);
+                boolean b1InOldTables = ((oldTables | (1L << b1)) == oldTables);
+                boolean b2InOldTables = ((oldTables | (1L << b2)) == oldTables);
+                // canonical case: b1 in oldTables, b2 == newTableBit
+                if (b1 == newTableBit && b2InOldTables) {
+                    j = j.swapInnerOuter();
+                }
+                if ((b1 == newTableBit && b2InOldTables) || (b2 == newTableBit && b1InOldTables)) {
+                    CostCard cc1 = cache.get(oldTables);
+                    CostCard cc2 = cache.get(1L << newTableBit);
+                    double cost = estimateJoinCost(j, cc1.card, cc2.card, cc1.cost, cc2.cost);
+                    if (cost < bestPlan.cost) {
+                        int card = estimateJoinCardinality(
+                                j, cc1.card, cc2.card,
+                                isPkey(bitsToTables.get(b1), j.f1PureName),
+                                isPkey(bitsToTables.get(b2), j.f2PureName),
+                                stats
+                        );
+                        Vector<LogicalJoinNode> plan = (Vector<LogicalJoinNode>) cc1.plan.clone();
+                        plan.add(j);
+                        bestPlan = new CostCard(cost, card, plan);
+                    }
+                }
             }
         }
-
-        // case where prevbest is left
-        double cost1 = estimateJoinCost(j, t1card, t2card, t1cost, t2cost);
-
-        LogicalJoinNode j2 = j.swapInnerOuter();
-        double cost2 = estimateJoinCost(j2, t2card, t1card, t2cost, t1cost);
-        if (cost2 < cost1) {
-            boolean tmp;
-            j = j2;
-            cost1 = cost2;
-            tmp = rightPkey;
-            rightPkey = leftPkey;
-            leftPkey = tmp;
-        }
-        if (cost1 >= bestCostSoFar)
-            return null;
-
-        CostCard cc = new CostCard();
-
-        cc.card = estimateJoinCardinality(j, t1card, t2card, leftPkey,
-                rightPkey, stats);
-        cc.cost = cost1;
-        cc.plan = (Vector<LogicalJoinNode>) prevBest.clone();
-        cc.plan.addElement(j); // prevbest is left -- add new join to end
-        return cc;
-    }
-
-    /**
-     * Return true if the specified table is in the list of joins, false
-     * otherwise
-     */
-    private boolean doesJoin(Vector<LogicalJoinNode> joinlist, String table) {
-        for (LogicalJoinNode j : joinlist) {
-            if (j.t1Alias.equals(table)
-                    || (j.t2Alias != null && j.t2Alias.equals(table)))
-                return true;
-        }
-        return false;
+        return bestPlan;
     }
 
     /**
      * Return true if field is a primary key of the specified table, false
      * otherwise
-     * 
+     *
      * @param tableAlias
      *            The alias of the table in the query
      * @param field
      *            The pure name of the field
      */
     private boolean isPkey(String tableAlias, String field) {
-        int tid1 = p.getTableId(tableAlias);
-        String pkey1 = Database.getCatalog().getPrimaryKey(tid1);
-
-        return pkey1.equals(field);
-    }
-
-    /**
-     * Return true if a primary key field is joined by one of the joins in
-     * joinlist
-     */
-    private boolean hasPkey(Vector<LogicalJoinNode> joinlist) {
-        for (LogicalJoinNode j : joinlist) {
-            if (isPkey(j.t1Alias, j.f1PureName)
-                    || (j.t2Alias != null && isPkey(j.t2Alias, j.f2PureName)))
-                return true;
-        }
-        return false;
-
+        int tid = p.getTableId(tableAlias);
+        String pkey = Database.getCatalog().getPrimaryKey(tid);
+        return (pkey != null && pkey.equals(field));
     }
 
     /**
      * Helper function to display a Swing window with a tree representation of
      * the specified list of joins. See {@link #orderJoins}, which may want to
      * call this when the analyze flag is true.
-     * 
+     *
      * @param js
      *            the join plan to visualize
      * @param pc
-     *            the PlanCache accumulated whild building the optimal plan
+     *            the plan cache accumulated while building the optimal plan
+     * @param tablesToBits
+     *            a mapping from table alias to their representation bits
      * @param stats
      *            table statistics for base tables
      * @param selectivities
@@ -434,7 +380,10 @@ public class JoinOptimizer {
      *            (where tables are indentified by their alias or name if no
      *            alias is given)
      */
-    private void printJoins(Vector<LogicalJoinNode> js, PlanCache pc,
+    private void printJoins(
+            Vector<LogicalJoinNode> js,
+            Map<Long, CostCard> pc,
+            Map<String, Integer> tablesToBits,
             HashMap<String, TableStats> stats,
             HashMap<String, Double> selectivities) {
 
@@ -455,11 +404,17 @@ public class JoinOptimizer {
         // int k;
         DefaultMutableTreeNode root = null, treetop = null;
         HashSet<LogicalJoinNode> pathSoFar = new HashSet<LogicalJoinNode>();
+        long pathSoFarKey = 0;
         boolean neither;
 
         System.out.println(js);
         for (LogicalJoinNode j : js) {
             pathSoFar.add(j);
+            for (String alias: new String[]{j.t1Alias, j.t2Alias}) {
+                if (alias != null) {
+                    pathSoFarKey |= tablesToBits.get(alias);
+                }
+            }
             System.out.println("PATH SO FAR = " + pathSoFar);
 
             String table1Name = Database.getCatalog().getTableName(
@@ -467,12 +422,11 @@ public class JoinOptimizer {
             String table2Name = Database.getCatalog().getTableName(
                     this.p.getTableId(j.t2Alias));
 
-            // Double c = pc.getCost(pathSoFar);
             neither = true;
 
             root = new DefaultMutableTreeNode("Join " + j + " (Cost ="
-                    + pc.getCost(pathSoFar) + ", card = "
-                    + pc.getCard(pathSoFar) + ")");
+                    + pc.get(pathSoFarKey).cost + ", card = "
+                    + pc.get(pathSoFarKey).card + ")");
             DefaultMutableTreeNode n = m.get(j.t1Alias);
             if (n == null) { // never seen this table before
                 n = new DefaultMutableTreeNode(j.t1Alias

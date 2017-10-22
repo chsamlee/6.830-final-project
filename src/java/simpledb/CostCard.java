@@ -11,4 +11,15 @@ public class CostCard {
     public int card;
     /** The optimal subplan */
     public Vector<LogicalJoinNode> plan;
+
+    public CostCard() {}
+
+    public CostCard(double cost, int card, Vector<LogicalJoinNode> plan) {
+        this.cost = cost;
+        this.card = card;
+        this.plan = plan;
+    }
+
+    // this object denotes an impossible plan
+    public static final CostCard IMPOSSIBLE = new CostCard(Double.MAX_VALUE, 0, new Vector<>());
 }

@@ -1,0 +1,59 @@
+Design decisions
+
+Selectivity estimation
+- For filter selectivity, I followed the instructions on 2.2.3 and implemented
+  an equi-width histogram. Two passes through the table are needed to create
+  the histograms: the first pass determines the boundaries and the second pass
+  inserts the tuples into histograms.
+- For join selectivity, I followed the simple solution described in 2.2.4.
+
+Join ordering
+- I used the Selinger algorithm for ordering joins.
+  + I separated the case i =  1 from the cases with more tables. This is
+    because the case requires no joins and we can directly compute cost and
+    cardinality from `stats` and `filterSelectivities` maps.
+  + I used long numbers to work through subsets instead of creating set
+    instances. See the section "improved subset iterator" for more details.
+
+Improved subset iterator
+- Suppose we want to join tables [A, B, C, D]. Instead of creating an instance
+  {A, C, D}, we can use numbers to represent the subsets. I used binary rep:
+  A, B, C, D correspond to 1, 2, 4, 8 respectively and the number that a subset
+  maps to is the sum of the numbers that the members of the subset correspond
+  to. For example, {A, C, D} is represented by 1 + 4 + 8 = 13.
+- The helper function kOneBitNumbers returns an iterator of all n-bit numbers
+  with k bits equal to 1, which corresponds to subsets of an n-element set with
+  k elements.
+- I used 64-bit integers (long) to encode the representations.
+  + This places a hard limit on the number of tables we can join (64). However,
+    it is still an improvement over an implementation that explicitly creates
+    the subsets because such implementation takes an unacceptably long time to
+    compute the best 64-table join.
+  + If one insists on removing the hard limit, he can use BigInteger instead of
+    long. I am not sure of the performance impact of using a class as encoding
+    compared to using a primitive type.
+  + I did not use BitSet because most of the class' operations mutate the
+    instance instead of creating a new instance of BitSet. Using a mutable
+    class as keys in hash map creates additional difficulties, so I chose an
+    immutable type.
+
+==============================
+
+API changes
+- I removed a few helper functions for orderJoin as well as PlanCache since
+  they are not used after improved subset iterator is implemented.
+- I lumped IntHistogram and StringHistogram under a parametric interface
+  Histogram so that I don't have to store the two classes in two separate data
+  structures.
+
+Missing/incomplete elements
+- My orderJoin implementation is somewhat sloppy with qualified vs. pure names,
+  as well as with nulls.
+
+Time spent on lab
+- 11 hours on exercises 1-4 and improved subset iterator
+  + I did not implement the set-based orderJoin and outright started with the
+    improved version, since I find the given helper functions hard to grasp.
+
+Bonus exercises implemented
+- improved subset iterator
