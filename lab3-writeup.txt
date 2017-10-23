@@ -5,7 +5,11 @@ Selectivity estimation
   an equi-width histogram. Two passes through the table are needed to create
   the histograms: the first pass determines the boundaries and the second pass
   inserts the tuples into histograms.
-- For join selectivity, I followed the simple solution described in 2.2.4.
+- For join selectivity, I implemented 2 methods to improve the performance.
+  For equijoins, I used the assumption that each value in the smaller table has
+  a matching value in the larger table. For inequality joins, I used sampling
+  to estimate selectivity. See the "improved join selectivity estimation" for
+  more details.
 
 Join ordering
 - I used the Selinger algorithm for ordering joins.
@@ -37,6 +41,35 @@ Improved subset iterator
     class as keys in hash map creates additional difficulties, so I chose an
     immutable type.
 
+Improved join selectivity estimation
+- Sampling-based estimation
+  + For each bucket in the first histogram, I generated a fixed number of
+    samples and computed the weighted average of the estimated selectivity
+    of the samples on the second histogram.
+  + When the operator is LT/LE/GT/GE, this method works well.
+  + For EQ/NE/LIKE, the accuracy of this method depends on how related the two
+    tables are. Since the filter selectivity implementation for equals is based
+    on a uniformly random distribution within buckets, this method works well
+    when the data in two tables are unrelated.
+  + For the same reason, this method produces a grossly inaccurate estimate
+    (compared to the simple solution) when the second table is a clone of the
+    first.
+- Equijoin: calculating the number of distinct elements
+  + Following on formula on readme, the only major task is to calculate the
+    number of distinct elements in a IntHistogram.
+  + The naive solution is to compute the expected number of distinct elements
+    per bucket based on the number of elements in the bucket. The formula can
+    be found on https://math.stackexchange.com/a/72351. This approach works
+    well when there are few elements, but breaks down for large tables.
+  + For large tables, I used the practical variant of HyperLogLog algorithm,
+    which is described in https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/40671.pdf.
+  + With the two distinct cardinality estimation methods combined, the new
+    estimate is quite accurate on joins where one column is a subset of the
+    other.
++ I did not try to combine these two approaches to produce a more accurate
+  method for estimating equijoins in general, but I feel that joint histograms
+  may work.
+
 ==============================
 
 API changes
@@ -54,6 +87,8 @@ Time spent on lab
 - 11 hours on exercises 1-4 and improved subset iterator
   + I did not implement the set-based orderJoin and outright started with the
     improved version, since I find the given helper functions hard to grasp.
+- 5 hours on advanced join cardinality estimation
 
 Bonus exercises implemented
 - improved subset iterator
+- advanced join cardinality estimation (via improving selectivity estimate)

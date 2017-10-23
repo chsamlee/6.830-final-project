@@ -89,4 +89,8 @@ public class StringHistogram implements Histogram<String> {
     public double avgSelectivity() {
         return hist.avgSelectivity();
     }
+
+    public static double estimateJoinSelectivity(StringHistogram h1, StringHistogram h2, Predicate.Op op) {
+        return IntHistogram.estimateJoinSelectivity(h1.hist, h2.hist, op);
+    }
 }

@@ -154,7 +154,33 @@ public class JoinOptimizer {
             String field2PureName, int card1, int card2, boolean t1pkey,
             boolean t2pkey, Map<String, TableStats> stats,
             Map<String, Integer> tableAliasToId) {
-
+        // if we have stats, probe into IntHistogram for a more accurate estimate
+        if (stats.containsKey(table1Alias) && stats.containsKey(table2Alias)) {
+            int baseCard;
+            if (joinOp == Predicate.Op.EQUALS) {
+                if (t1pkey) {
+                    baseCard = card2;
+                }
+                else if (t2pkey) {
+                    baseCard = card1;
+                }
+                else {
+                    baseCard = card1 * card2;
+                }
+            } else {
+                baseCard = card1 * card2;
+            }
+            double selectivity = TableStats.estimateJoinSelectivity(
+                    stats.get(table1Alias),
+                    field1PureName,
+                    stats.get(table2Alias),
+                    field2PureName,
+                    joinOp
+            );
+            return (int) (selectivity * baseCard);
+        }
+        // estimateJoinCardinality test in JoinOptimizerTest doesn't come with
+        // stats so we have to keep the simple solution
         if (joinOp == Predicate.Op.EQUALS) {
             if (t1pkey) {
                 return card2;
@@ -305,7 +331,6 @@ public class JoinOptimizer {
      * @return CostCard instance corresponding to lowest-cost plan (can be the current plan)
      */
     // include currentBestPlan so we don't have to unnecessarily construct the plan vector
-    @SuppressWarnings("unchecked")
     private CostCard findBestPlan(
             long oldTables,
             int newTableBit,
@@ -337,7 +362,7 @@ public class JoinOptimizer {
                                 isPkey(bitsToTables.get(b2), j.f2PureName),
                                 stats
                         );
-                        Vector<LogicalJoinNode> plan = (Vector<LogicalJoinNode>) cc1.plan.clone();
+                        Vector<LogicalJoinNode> plan = new Vector<>(cc1.plan);
                         plan.add(j);
                         bestPlan = new CostCard(cost, card, plan);
                     }
@@ -412,7 +437,7 @@ public class JoinOptimizer {
             pathSoFar.add(j);
             for (String alias: new String[]{j.t1Alias, j.t2Alias}) {
                 if (alias != null) {
-                    pathSoFarKey |= tablesToBits.get(alias);
+                    pathSoFarKey |= (1 << tablesToBits.get(alias));
                 }
             }
             System.out.println("PATH SO FAR = " + pathSoFar);
@@ -501,7 +526,6 @@ public class JoinOptimizer {
         }
 
         f.pack();
-
     }
 
 }

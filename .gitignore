@@ -1,6 +1,7 @@
 log
 bin/
 dist/
+out/
 *.iml
 .idea/
 src/simple-db-hw.iml

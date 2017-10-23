@@ -40,7 +40,6 @@ public class TableStats {
         } catch (IllegalAccessException e) {
             e.printStackTrace();
         }
-
     }
 
     public static Map<String, TableStats> getStatsMap() {
@@ -64,7 +63,7 @@ public class TableStats {
      * 100, though our tests assume that you have at least 100 bins in your
      * histograms.
      */
-    static final int NUM_HIST_BINS = 100;
+    private static final int NUM_HIST_BINS = 100;
 
     private final int tableId;
     private final int ioCostPerPage;
@@ -234,6 +233,44 @@ public class TableStats {
                 throw new IllegalArgumentException("Unknown op");
         }
         return histograms[field].estimateSelectivity(op, val);
+    }
+
+    /**
+     * Estimate the join selectivity between two fields.
+     */
+    public static double estimateJoinSelectivity(
+            TableStats stats1, String field1,
+            TableStats stats2, String field2, Predicate.Op op) {
+        TupleDesc td1 = Database.getCatalog().getTupleDesc(stats1.tableId);
+        TupleDesc td2 = Database.getCatalog().getTupleDesc(stats2.tableId);
+        int fieldIndex1 = td1.fieldNameToIndex(field1);
+        int fieldIndex2 = td2.fieldNameToIndex(field2);
+        Type type1 = td1.getFieldType(fieldIndex1);
+        Type type2 = td2.getFieldType(fieldIndex2);
+
+        Histogram h1 = stats1.histograms[fieldIndex1];
+        Histogram h2 = stats2.histograms[fieldIndex2];
+
+        if (type1 != type2) {
+            throw new IllegalArgumentException("Cannot join two different types");
+        }
+        else if (type1 == Type.INT_TYPE) {
+            return IntHistogram.estimateJoinSelectivity(
+                    (IntHistogram) h1,
+                    (IntHistogram) h2,
+                    op
+            );
+        }
+        else if (type1 == Type.STRING_TYPE) {
+            return StringHistogram.estimateJoinSelectivity(
+                    (StringHistogram) h1,
+                    (StringHistogram) h2,
+                    op
+            );
+        }
+        else {
+            throw new IllegalArgumentException("Unknown type");
+        }
     }
 
     /**
