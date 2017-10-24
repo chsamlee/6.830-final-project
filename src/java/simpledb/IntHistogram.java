@@ -224,8 +224,16 @@ public class IntHistogram implements Histogram<Integer> {
     public static double estimateJoinSelectivity(IntHistogram h1, IntHistogram h2, Predicate.Op op) {
         if (op == Predicate.Op.EQUALS || op == Predicate.Op.LIKE) {
             // assume that each value in the smaller table has a matching value in the larger table
+            // as long as the value in the smaller table is within bounds of the larger table
             // for equality case, estimation by sampling is only good if the datasets are unrelated
-            return 1.0 / Math.max(h1.estimateDistinctElements(), h2.estimateDistinctElements());
+            int h1card = h1.estimateDistinctElements();
+            int h2card = h2.estimateDistinctElements();
+            if (h1card > h2card) {
+                return h1.fractionInBounds(h2) / h1card;
+            }
+            else {
+                return h2.fractionInBounds(h1) / h2card;
+            }
         }
         else if (op == Predicate.Op.NOT_EQUALS) {
             return 1 - estimateJoinSelectivity(h1, h2, Predicate.Op.EQUALS);
@@ -244,6 +252,29 @@ public class IntHistogram implements Histogram<Integer> {
                 }
             }
             return selectivity;
+        }
+    }
+
+    /**
+     * Estimate the fraction of h2 that lies within the bounds of this histogram.
+     */
+    private double fractionInBounds(IntHistogram h2) {
+        if (h2.max <= this.max) {
+            if (h2.min >= this.min) {
+                return 1;
+            }
+            else {
+                return h2.estimateSelectivity(Predicate.Op.GREATER_THAN_OR_EQ, this.min);
+            }
+        }
+        else {
+            if (h2.min >= this.min) {
+                return h2.estimateSelectivity(Predicate.Op.LESS_THAN_OR_EQ, this.max);
+            }
+            else {
+                return h2.estimateSelectivity(Predicate.Op.GREATER_THAN_OR_EQ, this.min)
+                        + h2.estimateSelectivity(Predicate.Op.LESS_THAN_OR_EQ, this.max) - 1;
+            }
         }
     }
 
@@ -282,18 +313,20 @@ public class IntHistogram implements Histogram<Integer> {
         }
     }
 
-    // hash function to randomize the input values; used for HLL
+    // ====== Helper methods for HLL ======
+
+    // hash function to randomize the input values
     // https://stackoverflow.com/a/12996028
-    private static int hashInt(int n) {
+    private int hashInt(int n) {
         n = ((n >>> 16) ^ n) * 0x45d9f3b;
         n = ((n >>> 16) ^ n) * 0x45d9f3b;
         n = (n >>> 16) ^ n;
         return n;
     }
 
-    // compute the location of highest one bit; -1 if n = 0; used for HLL
+    // compute the location of highest one bit; -1 if n = 0
     // e.g. 1 = 0b1 -> 0, 13 = 0b1101 -> 3
-    private static int highestOneBitLocation(int n) {
+    private int highestOneBitLocation(int n) {
         if (n == 0) {
             return -1;
         }

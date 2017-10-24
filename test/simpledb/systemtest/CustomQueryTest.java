@@ -41,24 +41,24 @@ public class CustomQueryTest {
 
         // Create all of the tables, and add them to the catalog
         ArrayList<ArrayList<Integer>> aTuples = new ArrayList<ArrayList<Integer>>();
-        HeapFile emp = SystemTestUtil.createRandomHeapFile(
-                6, 200, 100, 1000, null, aTuples, "a");
-        Database.getCatalog().addTable(emp, "A");
+        HeapFile aFile = SystemTestUtil.createRandomHeapFile(
+                6, 400, 100, 1000, null, aTuples, "a");
+        Database.getCatalog().addTable(aFile, "A");
 
         ArrayList<ArrayList<Integer>> bTuples = new ArrayList<ArrayList<Integer>>();
-        HeapFile dept = SystemTestUtil.createRandomHeapFile(
-                3, 500, 900, 1900, null, bTuples, "b");
-        Database.getCatalog().addTable(dept, "B");
+        HeapFile bFile = SystemTestUtil.createRandomHeapFile(
+                3, 600, 900, 1900, null, bTuples, "b");
+        Database.getCatalog().addTable(bFile, "B");
 
         ArrayList<ArrayList<Integer>> cTuples = new ArrayList<ArrayList<Integer>>();
-        HeapFile hobby = SystemTestUtil.createRandomHeapFile(
+        HeapFile cFile = SystemTestUtil.createRandomHeapFile(
                 5, 500, 500, 1500,null, cTuples, "c");
-        Database.getCatalog().addTable(hobby, "C");
+        Database.getCatalog().addTable(cFile, "C");
 
         ArrayList<ArrayList<Integer>> dTuples = new ArrayList<ArrayList<Integer>>();
-        HeapFile hobbies = SystemTestUtil.createRandomHeapFile(
+        HeapFile dFile = SystemTestUtil.createRandomHeapFile(
                 4, 100, 1400, 2400,null, dTuples, "d");
-        Database.getCatalog().addTable(hobbies, "D");
+        Database.getCatalog().addTable(dFile, "D");
 
         // Get TableStats objects for each of the tables that we just generated.
         TableStats.setTableStats("A", new TableStats(Database.getCatalog().getTableId("A"), IO_COST));
@@ -70,7 +70,6 @@ public class CustomQueryTest {
         t.start();
         Parser p = new Parser();
         p.setTransaction(t);
-        // p.processNextStatement("SELECT * FROM A,B WHERE A.a1 = B.b1;");
         p.processNextStatement("SELECT * FROM A,B,C,D WHERE A.a1 = B.b1 AND B.b2 > C.c2 AND C.c3 = D.d3;");
     }
 

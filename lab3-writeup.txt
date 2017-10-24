@@ -7,17 +7,26 @@ Selectivity estimation
   inserts the tuples into histograms.
 - For join selectivity, I implemented 2 methods to improve the performance.
   For equijoins, I used the assumption that each value in the smaller table has
-  a matching value in the larger table. For inequality joins, I used sampling
-  to estimate selectivity. See the "improved join selectivity estimation" for
-  more details.
+  a matching value in the larger table whenever the value in smaller table is
+  within the histogram bounds of larger table. For inequality joins, I used
+  sampling to estimate selectivity. See the "improved join selectivity
+  estimation" section for more details.
+
 
 Join ordering
-- I used the Selinger algorithm for ordering joins.
+- I used a modified Selinger algorithm for ordering joins.
   + I separated the case i =  1 from the cases with more tables. This is
     because the case requires no joins and we can directly compute cost and
     cardinality from `stats` and `filterSelectivities` maps.
   + I used long numbers to work through subsets instead of creating set
     instances. See the section "improved subset iterator" for more details.
+  + The modified algorithm supports different right-tree depths. A depth of 1
+    corresponds to the traditional left-deep-tree-only algorithm, whereas a
+    depth of infinity corresponds to any tree. See "bushy plans" section for
+    implementation details. Although the code currently sets the depth to 3,
+    all the public tests can finish within time limit even when the depth is
+    set to Integer.MAX_VALUE.
+
 
 Improved subset iterator
 - Suppose we want to join tables [A, B, C, D]. Instead of creating an instance
@@ -40,6 +49,16 @@ Improved subset iterator
     instance instead of creating a new instance of BitSet. Using a mutable
     class as keys in hash map creates additional difficulties, so I chose an
     immutable type.
+- Everything mentioned above is based on commit 41a0992. Implementation of
+  bushy plans changed some of the code, but the ideas still stand.
+  + The only major change is kOneBitNumbers: instead of taking the number of
+    bits the number has, it now takes in a list of numbers. The new iterator's
+    output numbers must have bits = 1 only at those locations. This is a
+    generalization of the old function:
+    kOneBitNumbers_old(n, k) = kOneBitNumbers_new(decomposeToBits(2^n - 1), k)
+  + This change makes enumerating subsets of a subset easier, which is helpful
+    for generating bushy plans.
+
 
 Improved join selectivity estimation
 - Sampling-based estimation
@@ -62,13 +81,42 @@ Improved join selectivity estimation
     be found on https://math.stackexchange.com/a/72351. This approach works
     well when there are few elements, but breaks down for large tables.
   + For large tables, I used the practical variant of HyperLogLog algorithm,
-    which is described in https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/40671.pdf.
+    which is described in
+    https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/40671.pdf.
   + With the two distinct cardinality estimation methods combined, the new
     estimate is quite accurate on joins where one column is a subset of the
     other.
-+ I did not try to combine these two approaches to produce a more accurate
-  method for estimating equijoins in general, but I feel that joint histograms
-  may work.
+  + Obviously this version won't perform well on randomly-generated data. To
+    fix this issue, we multiply the selectivity by the fraction of values in
+    the smaller table that lies within the bounds of the larger table's
+    histogram. This fraction can be calculated using filter selectivities.
+
+
+Bushy plans
+- In the original implementation (41a0992), findBestPlan takes a subset of
+  tables (encoded as a long) as the outer loop and a single integer that
+  represents the next table to join. We can generalize this by making the
+  inner loop to also be a subset of tables.
+- In the algorithm given in section 2.3 of readme, only subsets of s that are
+  considered are the subsets of size (|s| - 1). However, we can change this to
+  consider all subsets of size at least (|s| - d) for any d < |s| and the
+  algorithm will still work.
+- To implement bushy sets using this line of reasoning, we will need a fast
+  method to compute subsets of a subset with certain size. See the last bullet
+  point in "improved subset iterator".
+- The original algorithm runs in O(n2^n) time for a set of n tables - there are
+  2^n subsets, and for each subset we have to go through O(n) ways of joining
+  the subset [by symmetry, there are n/2 ways to join a subset on average]. In
+  the revised algorithm with depth d, the runtime is
+  O(2^n (nCr(n,1) + ... + nCr(n,d))) which is approximately (n^d2^n) for small
+  d and O(2^(2n)) when d = n.
+
+
+Putting these together: CustomQueryTest
+- CustomQueryTest contains a 4-table join query that showcases a bushy plan
+  as well as improved cardinality estimation. The estimated final cardinality
+  is usually on the same magnitude as the actual cardinality, but most of the
+  estimations seem to be overestimates.
 
 ==============================
 
@@ -88,7 +136,9 @@ Time spent on lab
   + I did not implement the set-based orderJoin and outright started with the
     improved version, since I find the given helper functions hard to grasp.
 - 5 hours on advanced join cardinality estimation
+- 2 hour on bushy plans
 
 Bonus exercises implemented
 - improved subset iterator
 - advanced join cardinality estimation (via improving selectivity estimate)
+- bushy plans

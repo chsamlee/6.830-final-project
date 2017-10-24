@@ -14,6 +14,8 @@ public class JoinOptimizer {
     LogicalPlan p;
     Vector<LogicalJoinNode> joins;
 
+    private static final int MAX_RIGHT_TREE_DEPTH = 3;
+
     /**
      * Constructor
      *
@@ -243,17 +245,22 @@ public class JoinOptimizer {
         // use dynamic programming to compute joins with more tables
         final int TABLE_COUNT = tablesToBits.size();
         for (int k = 2; k <= TABLE_COUNT; k++) {
-            Iterator<Long> keys = kOneBitNumbers(TABLE_COUNT, k);
+            Iterator<Long> keys = kOneBitNumbers(decomposeToBits((1L << TABLE_COUNT) - 1), k);
             while (keys.hasNext()) {
                 long key = keys.next();
+                int[] keyDecomposition = decomposeToBits(key);
                 CostCard cc = CostCard.IMPOSSIBLE;
-                for (int i = 0; i <= TABLE_COUNT; i++) {
-                    long bitMask = 1L << i;
-                    long subsetKey = ~(~key | bitMask); // set bit i to 0
-                    if (subsetKey != key && planCache.containsKey(subsetKey)) {
-                        // bit i of key is equal to 1 - actually a subset
-                        // planCache contains subsetKey - possible to join the subset together
-                        cc = findBestPlan(subsetKey, i, tablesToBits, bitsToTables, planCache, stats, cc);
+                for (int depth = 1; depth <= Math.min(keyDecomposition.length , MAX_RIGHT_TREE_DEPTH); depth++) {
+                    Iterator<Long> subsetKeyIter = kOneBitNumbers(keyDecomposition, depth);
+                    while (subsetKeyIter.hasNext()) {
+                        long subsetKey2 = subsetKeyIter.next();
+                        long subsetKey1 = key ^ subsetKey2;
+                        if (planCache.containsKey(subsetKey1) && planCache.containsKey(subsetKey2)) {
+                            // planCache contains subsetKeyX - possible to join the subset together
+                            cc = findBestPlan(
+                                    subsetKey1, subsetKey2, tablesToBits,
+                                    bitsToTables, planCache, stats, cc);
+                        }
                     }
                 }
                 if (cc != CostCard.IMPOSSIBLE) {
@@ -271,21 +278,53 @@ public class JoinOptimizer {
     // ====== Helper methods for orderJoins ======
 
     /**
-     * Returns an iterator of n-bit (n < 64) numbers with k bits equal to 1.
+     * Decompose a number n into a list of numbers e_i such that n = sum(2 ** e_i)
+     * The array elements are sorted in increasing order.
      */
-    private Iterator<Long> kOneBitNumbers(int n, int k) {
-        // use an array to represent bits with value 1 in increasing order
-        long[] oneBits = new long[k];
-        for (int i = 0; i < k; i++) {
-            oneBits[i] = n - k + i;
+    private int[] decomposeToBits(long n) {
+        // first deconstruct the number into bits with value 1
+        int i = 0;
+        List<Integer> oneBitsList = new ArrayList<>();
+        while (n != 0) {
+            if ((n & 1) == 1) {
+                oneBitsList.add(i);
+            }
+            n >>>= 1;
+            i += 1;
         }
+        int[] oneBitsArray = new int[oneBitsList.size()];
+        for (int j = 0; j < oneBitsList.size(); j++) {
+            oneBitsArray[j] = oneBitsList.get(j);
+        }
+        return oneBitsArray;
+    }
+
+    /**
+     * Returns an iterator of numbers with k bits equal to 1 based on the
+     * bit decomposition of a number.
+     */
+    private Iterator<Long> kOneBitNumbers(int[] decomposition, int k) {
+        if (decomposition.length < k) {
+            throw new IllegalArgumentException("k is too large");
+        }
+        // use an array to represent combinations of bits
+        int[] oneIndices = new int[k];
+        for (int i = 0; i < k; i++) {
+            oneIndices[i] = decomposition.length - k + i;
+        }
+        // compute the last number that we should ever return
+        // used as an easy check for stopping
+        final long lastNumToReturn = Arrays.stream(decomposition)
+                                           .limit(k)
+                                           .mapToLong(n -> 1L << n)
+                                           .sum();
 
         return new Iterator<Long>() {
             long lastReturned = 0;
 
             @Override
             public boolean hasNext() {
-                return lastReturned != (1 << k) - 1;
+                return lastReturned != lastNumToReturn;
             }
 
             @Override
@@ -297,21 +336,21 @@ public class JoinOptimizer {
                     // find the right bit to decrement
                     int decrBit = -1;
                     for (int i = 0; i < k; i++) {
-                        if (oneBits[i] != i) {
+                        if (oneIndices[i] != i) {
                             decrBit = i;
                             break;
                         }
                     }
                     // decrement all lower bits
-                    oneBits[decrBit]--;
+                    oneIndices[decrBit]--;
                     for (int j = 0; j < decrBit; j++) {
-                        oneBits[j] = oneBits[decrBit] - (decrBit - j);
+                        oneIndices[j] = oneIndices[decrBit] - (decrBit - j);
                     }
                 }
                 // construct the number from the bits
                 long next = 0;
-                for (long i: oneBits) {
-                    next |= (1 << i);
+                for (int i: oneIndices) {
+                    next |= (1 << decomposition[i]);
                 }
                 lastReturned = next;
                 return next;
@@ -321,19 +360,19 @@ public class JoinOptimizer {
 
     /**
      * Find the optimal way to join newTableBit to subplan
-     * @param oldTables [long] existing tables that are already joined
-     * @param newTableBit [int] bit of the table
+     * @param outerTables [long] key corresponding to tables to go to outer loop
+     * @param innerTables [long] key corresponding to tables to go to inner loop
      * @param tablesToBits [map] mapping from table names to bits
      * @param bitsToTables [ma[] mapping from bits to table names
      * @param cache [map] previously-computed best subplans
      * @param stats [map] table stats
-     * @param currentBestPlan [CostCard] lowest-cost plan for joining oldTables and newTableBit so far
+     * @param currentBestPlan [CostCard] lowest-cost plan for joining outerTables and newTableBit so far
      * @return CostCard instance corresponding to lowest-cost plan (can be the current plan)
      */
     // include currentBestPlan so we don't have to unnecessarily construct the plan vector
     private CostCard findBestPlan(
-            long oldTables,
-            int newTableBit,
+            long outerTables,
+            long innerTables,
             Map<String, Integer> tablesToBits,
             Map<Integer, String> bitsToTables,
             Map<Long, CostCard> cache,
@@ -345,15 +384,19 @@ public class JoinOptimizer {
             if (j.t1Alias != null && j.t2Alias != null) {
                 int b1 = tablesToBits.get(j.t1Alias);
                 int b2 = tablesToBits.get(j.t2Alias);
-                boolean b1InOldTables = ((oldTables | (1L << b1)) == oldTables);
-                boolean b2InOldTables = ((oldTables | (1L << b2)) == oldTables);
-                // canonical case: b1 in oldTables, b2 == newTableBit
-                if (b1 == newTableBit && b2InOldTables) {
+                boolean b1InOldTables = ((outerTables | (1L << b1)) == outerTables);
+                boolean b2InOldTables = ((outerTables | (1L << b2)) == outerTables);
+                boolean b1InNewTables = ((innerTables | (1L << b1)) == innerTables);
+                boolean b2InNewTables = ((innerTables | (1L << b2)) == innerTables);
+
+                // canonical case: b1 in outerTables, b2 in innerTables
+                if (b1InNewTables && b2InOldTables) {
                     j = j.swapInnerOuter();
                 }
-                if ((b1 == newTableBit && b2InOldTables) || (b2 == newTableBit && b1InOldTables)) {
-                    CostCard cc1 = cache.get(oldTables);
-                    CostCard cc2 = cache.get(1L << newTableBit);
+                // outerTables and innerTables are disjoint, so at most one clause holds
+                if ((b1InNewTables && b2InOldTables) || (b2InNewTables && b1InOldTables)) {
+                    CostCard cc1 = cache.get(outerTables);
+                    CostCard cc2 = cache.get(innerTables);
                     double cost = estimateJoinCost(j, cc1.card, cc2.card, cc1.cost, cc2.cost);
                     if (cost < bestPlan.cost) {
                         int card = estimateJoinCardinality(
@@ -363,6 +406,7 @@ public class JoinOptimizer {
                                 stats
                         );
                         Vector<LogicalJoinNode> plan = new Vector<>(cc1.plan);
+                        plan.addAll(cc2.plan);
                         plan.add(j);
                         bestPlan = new CostCard(cost, card, plan);
                     }
