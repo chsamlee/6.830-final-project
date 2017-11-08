@@ -18,6 +18,7 @@ public class Transaction {
     /** Start the transaction running */
     public void start() {
         started = true;
+        Database.getBufferPool().getLockManager().addTransaction(tid);
         try {
             Database.getLogFile().logXactionBegin(tid);
         } catch (IOException e) {
@@ -41,7 +42,6 @@ public class Transaction {
 
     /** Handle the details of transaction commit / abort */
     public void transactionComplete(boolean abort) throws IOException {
-
         if (started) {
             //write commit / abort records
             if (abort) {
@@ -58,6 +58,7 @@ public class Transaction {
                 e.printStackTrace();
             }
 
+            Database.getBufferPool().getLockManager().completeTransaction(tid);
             //setting this here means we could possibly write multiple abort records -- OK?
             started = false;
         }

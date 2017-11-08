@@ -124,10 +124,15 @@ public class HeapFile implements DbFile {
         for (int pageNumber = 0; pageNumber < pageCount; pageNumber++) {
             HeapPageId pid = new HeapPageId(getId(), pageNumber);
             HeapPage page = (HeapPage) Database.getBufferPool()
-                                               .getPage(tid, pid, Permissions.READ_WRITE);
+                                               .getPage(tid, pid, Permissions.READ_ONLY);
             if (page.getNumEmptySlots() > 0) {
+                page = (HeapPage) Database.getBufferPool()
+                                          .getPage(tid, pid, Permissions.READ_WRITE);
                 page.insertTuple(t);
                 return new ArrayList<>(Collections.singletonList(page));
+            }
+            else {
+                Database.getBufferPool().releasePage(tid, pid);
             }
         }
         // all pages are full, create a new page
@@ -139,18 +144,6 @@ public class HeapFile implements DbFile {
                                            .getPage(tid, pid, Permissions.READ_WRITE);
         page.insertTuple(t);
         return new ArrayList<>(Collections.singletonList(page));
-        /*
-        // old code
-        RandomAccessFile raf = new RandomAccessFile(file, "rw");
-        raf.setLength(raf.length() + BufferPool.getPageSize());
-        raf.close();
-        // access the new page via BufferPool
-        HeapPageId pid = new HeapPageId(getId(), pageCount);
-        HeapPage page = (HeapPage) Database.getBufferPool()
-                                           .getPage(tid, pid, Permissions.READ_WRITE);
-        page.insertTuple(t);
-        return new ArrayList<>(Collections.singletonList(page));
-         */
     }
 
     // see DbFile.java for javadocs

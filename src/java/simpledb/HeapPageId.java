@@ -59,6 +59,11 @@ public class HeapPageId implements PageId {
         return getTableId() == other.getTableId() && getPageNumber() == other.getPageNumber();
     }
 
+    @Override
+    public String toString() {
+        return String.format("HeapPageId(tableId=%s, pageNumber=%s)", tableId, pageNumber);
+    }
+
     /**
      *  Return a representation of this object as an array of
      *  integers, for writing to disk.  Size of returned array must contain
