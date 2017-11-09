@@ -10,20 +10,18 @@ public class LockManager {
 
     private final Map<TransactionId, Map<PageId, Permissions>> holdings;
     private final Map<PageId, UpgradeableLock> pageLocks;
+    private final PrecedenceGraph pGraph;
 
     public LockManager() {
         this.holdings = new HashMap<>();
         this.pageLocks = new HashMap<>();
+        this.pGraph = new PrecedenceGraph();
     }
 
-    private void assertTransactionInManager(TransactionId tid, boolean failSilently) {
+    private void assertTransactionInManager(TransactionId tid) {
         if (!holdings.containsKey(tid)) {
-            if (failSilently) {
-                holdings.put(tid, new HashMap<>());
-            }
-            else {
-                throw new IllegalArgumentException("Transaction not found");
-            }
+            holdings.put(tid, new HashMap<>());
+            // throw new IllegalArgumentException("Transaction not found");
         }
     }
 
@@ -35,17 +33,19 @@ public class LockManager {
             throw new IllegalArgumentException("This transaction is already added");
         }
         holdings.put(tid, new HashMap<>());
+        pGraph.addTransaction(tid);
     }
 
     /**
      * Remove a transaction from the manager after it is finished.
      */
     public void completeTransaction(TransactionId tid) {
-        assertTransactionInManager(tid, false);
+        assertTransactionInManager(tid);
         if (!holdings.get(tid).isEmpty()) {
             throw new IllegalStateException("This transaction still holds some locks");
         }
         holdings.remove(tid);
+        pGraph.removeTransaction(tid);
     }
 
     private void assertPageInManager(PageId pid) {
@@ -88,14 +88,27 @@ public class LockManager {
     /**
      * Acquire a lock for a certain page on behalf of a transaction.
      */
-    public void acquire(TransactionId tid, PageId pid, Permissions perm) {
-        assertTransactionInManager(tid, true);
+    public void acquire(TransactionId tid, PageId pid, Permissions perm) throws DeadlockException {
+        assertTransactionInManager(tid);
         assertPageInManager(pid);
         if (perm == Permissions.READ_ONLY) {
             pageLocks.get(pid).readLock(tid);
+            TransactionId writerTid = pageLocks.get(pid).getWriter();
+            if (writerTid != null && !writerTid.equals(tid)) {
+                pGraph.addDependency(writerTid, tid);
+            }
         }
         else if (perm == Permissions.READ_WRITE) {
             pageLocks.get(pid).writeLock(tid);
+            TransactionId writerTid = pageLocks.get(pid).getWriter();
+            if (writerTid != null && !writerTid.equals(tid)) {
+                pGraph.addDependency(writerTid, tid);
+            }
+            for (TransactionId readerTid: pageLocks.get(pid).getReaders()) {
+                if (!readerTid.equals(tid)) {
+                    pGraph.addDependency(readerTid, tid);
+                }
+            }
         }
         else {
             throw new IllegalArgumentException("Unknown permission level");
@@ -109,7 +122,7 @@ public class LockManager {
      * Release the lock on a page that is held by some transaction.
      */
     public void release(TransactionId tid, PageId pid) {
-        assertTransactionInManager(tid, false);
+        assertTransactionInManager(tid);
         assertPageInManager(pid);
         Permissions perm = holdings.get(tid).get(pid);
         if (perm == Permissions.READ_ONLY) {
@@ -137,7 +150,7 @@ public class LockManager {
      * Release all locks on a transaction.
      */
     public void releaseTransaction(TransactionId tid) {
-        assertTransactionInManager(tid, false);
+        assertTransactionInManager(tid);
         holdings.get(tid).forEach((pid, perm) -> {
             if (perm == Permissions.READ_ONLY) {
                 pageLocks.get(pid).readUnlock(tid);

@@ -76,7 +76,14 @@ public class BufferPool {
             throws TransactionAbortedException, DbException {
         lockManager.addPage(pid);
         // lock before fetching page
-        lockManager.acquire(tid, pid, perm);
+        try {
+            lockManager.acquire(tid, pid, perm);
+        }
+        catch (DeadlockException e) {
+            // TODO
+            e.printStackTrace();
+            throw new RuntimeException("DEBUG");
+        }
         // getting the page from file
         if (!pageCache.contains(pid)) {
             DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());

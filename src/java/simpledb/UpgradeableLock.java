@@ -26,6 +26,16 @@ public class UpgradeableLock {
         writer = null;
     }
 
+    // shouldn't be used outside of LockManager for precedence graph
+    Set<TransactionId> getReaders() {
+        return readers;
+    }
+
+    // shouldn't be used outside of LockManager for precedence graph
+    TransactionId getWriter() {
+        return writer;
+    }
+
     /**
      * Acquire a shared lock.
      */
