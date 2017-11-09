@@ -34,7 +34,7 @@ public class PrecedenceGraph {
     }
 
     public synchronized void addDependency(TransactionId from, TransactionId to) throws DeadlockException {
-        System.out.println("Adding edge from " + from + " to " + to);
+        // System.out.println("Adding edge from " + from + " to " + to);
         if (hasPath(to, from)) {
             throw new DeadlockException();
         }

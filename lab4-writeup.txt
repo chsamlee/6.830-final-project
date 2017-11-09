@@ -1,0 +1,9 @@
+Design decisions
+
+I implemented page-level locking granularity because tuple-level locking has substantial overhead and page-level locking should not affect concurrency too much since each page only has at most 1024 tuples.
+
+For deadlock detection, I used dependency graphs for the following reason
+- We can immediately determine if there is a deadlock
+- Timeouts require additional threads and the system can become very complex
+
+For deadlock resolution, I chose aborting yourself.

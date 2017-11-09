@@ -80,9 +80,8 @@ public class BufferPool {
             lockManager.acquire(tid, pid, perm);
         }
         catch (DeadlockException e) {
-            // TODO
-            e.printStackTrace();
-            throw new RuntimeException("DEBUG");
+            System.out.println("Deadlock detected while processing " + tid);
+            throw new TransactionAbortedException();
         }
         // getting the page from file
         if (!pageCache.contains(pid)) {
