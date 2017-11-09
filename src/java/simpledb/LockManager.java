@@ -89,26 +89,26 @@ public class LockManager {
      * Acquire a lock for a certain page on behalf of a transaction.
      */
     public void acquire(TransactionId tid, PageId pid, Permissions perm) throws DeadlockException {
-        System.out.println("Transaction " + tid + " trying to acquire " + pid + ", perm=" + perm);
+        // System.out.println("Transaction " + tid + " trying to acquire " + pid + ", perm=" + perm);
         assertTransactionInManager(tid);
         assertPageInManager(pid);
         synchronized (this) {
             if (perm == Permissions.READ_ONLY) {
                 TransactionId writerTid = pageLocks.get(pid).getWriter();
-                System.out.println("RO acquire called; writer=" + writerTid);
+                // System.out.println("RO acquire called; writer=" + writerTid);
                 if (writerTid != null && !writerTid.equals(tid)) {
                     pGraph.addDependency(writerTid, tid);
                 }
                 // pageLocks.get(pid).readLock(tid);
             } else if (perm == Permissions.READ_WRITE) {
                 TransactionId writerTid = pageLocks.get(pid).getWriter();
-                System.out.println("RW acquire called; writer=" + writerTid);
+                // System.out.println("RW acquire called; writer=" + writerTid);
                 if (writerTid != null && !writerTid.equals(tid)) {
                     pGraph.addDependency(writerTid, tid);
                 }
                 for (TransactionId readerTid : pageLocks.get(pid).getReaders()) {
                     if (!readerTid.equals(tid)) {
-                        System.out.println("reader includes " + readerTid);
+                        // System.out.println("reader includes " + readerTid);
                         pGraph.addDependency(readerTid, tid);
                     }
                 }

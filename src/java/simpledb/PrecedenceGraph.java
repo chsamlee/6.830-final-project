@@ -18,8 +18,8 @@ public class PrecedenceGraph {
     }
 
     public void addTransaction(TransactionId tid) {
-        forward.put(tid, new HashSet<>());
-        backward.put(tid, new HashSet<>());
+        forward.putIfAbsent(tid, new HashSet<>());
+        backward.putIfAbsent(tid, new HashSet<>());
     }
 
     public void removeTransaction(TransactionId tid) {
@@ -35,6 +35,8 @@ public class PrecedenceGraph {
 
     public synchronized void addDependency(TransactionId from, TransactionId to) throws DeadlockException {
         // System.out.println("Adding edge from " + from + " to " + to);
+        addTransaction(from);
+        addTransaction(to);
         if (hasPath(to, from)) {
             throw new DeadlockException();
         }
