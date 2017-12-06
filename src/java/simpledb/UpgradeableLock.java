@@ -79,10 +79,11 @@ public class UpgradeableLock {
         if (holdsWriteLock(tid)) {
             return;
         }
-        while (!readers.isEmpty()) {
+        while (!readers.isEmpty() || writer != null) {
             // upgrading a read lock to write lock
-            if (readers.size() == 1 && readers.contains(tid)) {
+            if (readers.size() == 1 && readers.contains(tid) && writer == null) {
                 readers.remove(tid);
+                writer = tid;
                 break;
             }
             try {

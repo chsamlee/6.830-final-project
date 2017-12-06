@@ -89,7 +89,6 @@ public class LockManager {
      * Acquire a lock for a certain page on behalf of a transaction.
      */
     public void acquire(TransactionId tid, PageId pid, Permissions perm) throws DeadlockException {
-        // System.out.println("Transaction " + tid + " trying to acquire " + pid + ", perm=" + perm);
         assertTransactionInManager(tid);
         assertPageInManager(pid);
         synchronized (this) {
