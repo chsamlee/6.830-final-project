@@ -56,6 +56,11 @@ public class Catalog {
      * @param pkeyField the name of the primary key field
      */
     public void addTable(DbFile file, String name, String pkeyField) {
+        addOneTable(file, name, pkeyField);
+        // addOneTable(extraFieldsHeapFile, blah, rowId);
+    }
+
+    public void addOneTable(DbFile file, String name, String pkeyField) {
         new TableInfo(file, name, pkeyField);
         if (nameToId.containsKey(name)) {
             // remove existing table with same name
