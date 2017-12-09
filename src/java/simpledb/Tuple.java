@@ -91,6 +91,16 @@ public class Tuple implements Serializable {
     }
 
     /**
+     * Only keep the first i fields of the tuple.
+     */
+    public static Tuple truncate(Tuple tup, int i) {
+        Tuple newTup = new Tuple(TupleDesc.truncate(tup.getTupleDesc(), i));
+        newTup.fields = Arrays.copyOfRange(tup.fields, 0, i);
+        newTup.recordId = null;
+        return newTup;
+    }
+
+    /**
      * Returns the contents of this Tuple as a string. Note that to pass the
      * system tests, the format needs to be as follows:
      *

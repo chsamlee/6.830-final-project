@@ -198,6 +198,10 @@ public class TupleDesc implements Serializable {
         return new TupleDesc(newTdItems);
     }
 
+    public static TupleDesc truncate(TupleDesc td, int i) {
+        return new TupleDesc(Arrays.copyOfRange(td.tdItems, 0, i));
+    }
+
     /**
      * Compares the specified object with this TupleDesc for equality. Two
      * TupleDescs are considered equal if they have the same number of items
