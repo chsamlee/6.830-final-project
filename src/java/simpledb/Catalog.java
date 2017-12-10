@@ -22,7 +22,6 @@ public class Catalog {
      * A helper class for grouping information on a table.
      */
     private class TableInfo {
-
         public final DbFile file;
         public final String name;
         public final String pkey;
@@ -36,6 +35,7 @@ public class Catalog {
 
     private Map<Integer, TableInfo> tables;
     private Map<String, Integer> nameToId;
+    private Map<Integer, Map<Integer, Integer>> foreignKeys; // table -> column -> referenced table
 
     /**
      * Constructor.
@@ -44,10 +44,26 @@ public class Catalog {
     public Catalog() {
         tables = new HashMap<>();
         nameToId = new HashMap<>();
+        foreignKeys = new HashMap<>();
+    }
+
+    public void addForeignKey(int tableId, int col, int refTableId) {
+        // TODO: check that foreign keys don't form a cycle (low priority)
+        if (!foreignKeys.containsKey(tableId)) {
+            foreignKeys.put(tableId, new HashMap<>());
+        }
+        foreignKeys.get(tableId).put(col, refTableId);
+    }
+
+    public Map<Integer, Integer> getForeignKeys(int tableId) {
+        if (!foreignKeys.containsKey(tableId)) {
+            foreignKeys.put(tableId, new HashMap<>());
+        }
+        return foreignKeys.get(tableId);
     }
 
     /**
-     * Add a new table to the catalog.
+     * Add a new table to the catalog. A hidden extra fields table will also be created.
      * This table's contents are stored in the specified DbFile.
      * @param file the contents of the table to add;  file.getId() is the identfier of
      *    this file/tupledesc param for the calls getTupleDesc and getFile
@@ -56,11 +72,14 @@ public class Catalog {
      * @param pkeyField the name of the primary key field
      */
     public void addTable(DbFile file, String name, String pkeyField) {
-        addOneTable(file, name, pkeyField);
-        // addOneTable(extraFieldsHeapFile, blah, rowId);
+        createTable(file, name, pkeyField);
+        // createTable(extraFieldsHeapFile, blah, rowId);
     }
 
-    public void addOneTable(DbFile file, String name, String pkeyField) {
+    /**
+     * Create one table.
+     */
+    private void createTable(DbFile file, String name, String pkeyField) {
         new TableInfo(file, name, pkeyField);
         if (nameToId.containsKey(name)) {
             // remove existing table with same name
