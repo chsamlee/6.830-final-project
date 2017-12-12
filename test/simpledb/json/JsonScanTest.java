@@ -10,70 +10,50 @@ import com.google.gson.*;
 import simpledb.*;
 
 public class JsonScanTest {
-	
+
+    private static final Catalog catalog = Database.getCatalog();
 	private static TransactionId tid;
 
-	public static void writeData(Object[][] data, File file) throws IOException {
-        File dummyFile = new File("dummy.txt");
-        try (FileOutputStream stream = new FileOutputStream(dummyFile)) {
-        	for(int i = 0;i<data.length;i++) {
-        		for(int j = 0; j<data[i].length;j++) {
-        			Object datum = data[i][j];
-        			if(datum instanceof String) {
-        				stream.write(((String)datum).getBytes());
-        			}
-        			else if(datum instanceof Integer) {
-        				stream.write((Integer)datum);
-        			}
-        			else {
-        				System.err.println("Invalid data");
-        			}
-        			if(j<data[i].length - 1) {
-        				stream.write(",".getBytes());
-        			}
-        		}
-    			if(i<data.length - 1) {
-    				stream.write(System.lineSeparator().getBytes());
-    			}
-        	}
+	@Before
+    public void setUp() {
+	    tid = new TransactionId();
+        for (SampleData.Table t : SampleData.tables) {
+            try {
+                HeapFile hf = Utility.createHeapFile(t.data, t.name + ".dat", t.td);
+                catalog.addTable(hf, t.name, "id");
+            }
+            catch (IOException ioe) {
+                ioe.printStackTrace();
+            }
+            catch (SchemaException se) {
+                // most likely due to bad sample data
+                se.printStackTrace();
+                System.exit(1);
+            }
         }
-        HeapFileEncoder.convert(dummyFile, file, 128*1000, data[0].length);
-	}
+    }
 
-    @Before
-    public void setUpClass() {
-    	tid = new TransactionId();
-        System.out.println("Called before any test is run");
-        try {
-        	// Students
-            File studentFile = new File("students.dat");
-			writeData(SampleData.getStudentData(), studentFile);
-			Database.getCatalog().addTable(new HeapFile(studentFile, SampleData.getStudentTupleDesc()), "students");
+    @After
+    public void tearDown() {
+	    for (SampleData.Table t : SampleData.tables) {
+	        pageCleanup(t.name);
+	        pageCleanup("$" + t.name + "_extras");
+        }
+        catalog.clear();
+    }
 
-        	// Schools
-            File schoolFile = new File("schools.dat");
-			writeData(SampleData.getSchoolData(), schoolFile);
-			Database.getCatalog().addTable(new HeapFile(schoolFile, SampleData.getSchoolTupleDesc()), "schools");
-        
-        	// Cities
-            File cityFile = new File("cities.dat");
-			writeData(SampleData.getCityData(), cityFile);
-			Database.getCatalog().addTable(new HeapFile(cityFile, SampleData.getCityTupleDesc()), "cities");
-
-        } catch (IOException e) {
-			e.printStackTrace();
-		}
-        /**
-         * Create table here
-         * 1. have an arraylist of data
-         * 2. call convert on the arraylist with outFile = temp file
-         * 3. add temp file into catalog
-         */
-        /**
-         * Cleanup
-         * 1. delete table from catalog
-         * 2. delete temp file (may be auto)
-         */
+    private void pageCleanup(String name) {
+        // discard the pages
+        HeapFile hf = (HeapFile) catalog.getDatabaseFile(catalog.getTableId(name));
+        for (int pg = 0; pg < hf.numPages(); pg++) {
+            Database.getBufferPool().discardPage(new HeapPageId(hf.getId(), pg));
+        }
+        // physically remove the file
+        File f = new File(name + ".dat");
+        boolean fileDeleted = f.delete();
+        if (!fileDeleted) {
+            System.out.println("Warning: file " + f + "not cleaned up properly");
+        }
     }
 
     @Test
@@ -198,7 +178,7 @@ public class JsonScanTest {
     	JsonParser parser = new JsonParser();
     	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     }
-    
+
     @Test
     public void arrayOfObjectsTest() {
     	String jsonStr = "[{"
@@ -236,10 +216,5 @@ public class JsonScanTest {
     	JsonParser parser = new JsonParser();
     	JsonArray array = parser.parse(jsonStr).getAsJsonArray();
     }
-    
-    @After
-    public void cleanUp() {
-    	Database.getCatalog().clear();
-    }
-    
+
 }

@@ -18,6 +18,15 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class Catalog {
 
+    private static final TupleDesc extrasTd_INT = new TupleDesc(
+            new Type[]{Type.INT_TYPE, Type.STRING_TYPE, Type.STRING_TYPE},
+            new String[]{"row", "key", "value"}
+    );
+    private static final TupleDesc extrasTd_STR = new TupleDesc(
+            new Type[]{Type.STRING_TYPE, Type.STRING_TYPE, Type.STRING_TYPE},
+            new String[]{"row", "key", "value"}
+    );
+
     /**
      * A helper class for grouping information on a table.
      */
@@ -73,7 +82,24 @@ public class Catalog {
      */
     public void addTable(DbFile file, String name, String pkeyField) {
         createTable(file, name, pkeyField);
-        // createTable(extraFieldsHeapFile, blah, rowId);
+
+        TupleDesc mainTableTd = file.getTupleDesc();
+        Type pkeyType = mainTableTd.getFieldType(mainTableTd.fieldNameToIndex(pkeyField));
+        TupleDesc extrasTd = pkeyType == Type.INT_TYPE ? extrasTd_INT : extrasTd_STR;
+        try {
+            createTable(
+                    Utility.createHeapFile(
+                            new Object[][]{},
+                            "$" + name + "_extras.dat",
+                            extrasTd
+                    ),
+                    "$" + name + "_extras",
+                    "rowId"
+            );
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     /**

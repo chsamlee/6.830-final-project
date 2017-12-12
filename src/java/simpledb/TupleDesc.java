@@ -148,6 +148,12 @@ public class TupleDesc implements Serializable {
         return tdItems[i].fieldType;
     }
 
+    public Type[] getTypeAr() {
+        return Arrays.stream(tdItems)
+                     .map(item -> item.fieldType)
+                     .toArray(Type[]::new);
+    }
+
     /**
      * Find the index of the field with a given name.
      *
@@ -248,4 +254,5 @@ public class TupleDesc implements Serializable {
                                         .collect(Collectors.toList());
         return String.join(", ", itemString);
     }
+
 }

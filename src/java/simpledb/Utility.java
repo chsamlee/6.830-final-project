@@ -1,5 +1,7 @@
 package simpledb;
 
+import simpledb.json.SchemaException;
+
 import java.io.*;
 import java.util.ArrayList;
 import java.util.UUID;
@@ -136,7 +138,7 @@ public class Utility {
         Database.getCatalog().addTable(hf, UUID.randomUUID().toString());
         return hf;
     }
-    
+
     public static HeapFile openHeapFile(int cols, String colPrefix, File f) {
         // create the HeapFile and add it to the catalog
     	TupleDesc td = getTupleDesc(cols, colPrefix);
@@ -153,5 +155,12 @@ public class Utility {
         }
         return out;
     }
+
+    public static HeapFile createHeapFile(Object[][] data, String path, TupleDesc td)
+            throws IOException, SchemaException {
+        HeapFileEncoder.convert(data, td.getTypeAr(), new File(path), BufferPool.getPageSize());
+        return new HeapFile(new File(path), td);
+    }
+
 }
 

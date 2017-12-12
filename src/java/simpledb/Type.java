@@ -24,7 +24,12 @@ public enum Type implements Serializable {
             }
         }
 
-    }, STRING_TYPE() {
+        @Override
+        public Class getUnderlyingCls() {
+            return Integer.class;
+        }
+    },
+    STRING_TYPE() {
         @Override
         public int getLen() {
             return STRING_LEN+4;
@@ -42,8 +47,13 @@ public enum Type implements Serializable {
                 throw new ParseException("couldn't parse", 0);
             }
         }
+
+        @Override
+        public Class getUnderlyingCls() {
+            return String.class;
+        }
     };
-    
+
     public static final int STRING_LEN = 128;
 
   /**
@@ -59,5 +69,10 @@ public enum Type implements Serializable {
    *   of the appropriate type.
    */
     public abstract Field parse(DataInputStream dis) throws ParseException;
+
+    /**
+     * Get the class object for the encoded data type.
+     */
+    public abstract Class getUnderlyingCls();
 
 }
