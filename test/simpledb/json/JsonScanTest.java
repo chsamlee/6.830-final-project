@@ -9,7 +9,7 @@ import com.google.gson.*;
 
 import simpledb.*;
 
-public class JsonInsert2Test {
+public class JsonScanTest {
 	
 	private static TransactionId tid;
 
