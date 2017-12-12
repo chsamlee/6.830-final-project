@@ -138,7 +138,7 @@ public class JsonScanTest {
     public void intToStringTest() {
     	String jsonStr = "{ firstname: 'John',"
     	 +"lastname: 3,"
-    	 +"year: 2,"
+    	 +"year: 2"
     	 +"}";
     	JsonParser parser = new JsonParser();
     	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
