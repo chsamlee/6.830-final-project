@@ -15,7 +15,7 @@ public class JsonScan implements OpIterator {
     private int tableId;
     private int index = 0;
     private Queue<Tuple> tupBuffer = new LinkedList<>();
-    static private TupleDesc tableToInsertIntoDesc = new TupleDesc(new Type[] {Type.INT_TYPE},new String[] {"_tableid"});
+    static private TupleDesc tableToInsertIntoDesc = new TupleDesc(new Type[] {Type.INT_TYPE},new String[] {null});
 
     public JsonScan(TransactionId t, JsonElement je, int table) {
         this.tid = t;
@@ -83,7 +83,7 @@ public class JsonScan implements OpIterator {
         TupleDesc td = catalog.getTupleDesc(table);
         Map<Integer, Integer> refs = catalog.getForeignKeys(table);
 
-        Tuple tup = new Tuple(TupleDesc.merge(td, tableToInsertIntoDesc));
+        Tuple tup = new Tuple(td);
         
         KeyMatching matching = new KeyMatching(obj);
         
@@ -240,8 +240,7 @@ public class JsonScan implements OpIterator {
         }
 
         // append table info to the tuple
-        TupleDesc infoTd = new TupleDesc(new Type[]{Type.INT_TYPE}, new String[]{null});
-        Tuple infoTup = new Tuple(infoTd);
+        Tuple infoTup = new Tuple(tableToInsertIntoDesc);
         infoTup.setField(0, new IntField(table));
         Tuple mergedTup = Tuple.merge(tup, infoTup);
         // append to buffer - we do this as a side effect to make recursion easier
