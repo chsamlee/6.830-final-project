@@ -1,4 +1,7 @@
-package simpledb;
+package simpledb.json;
+
+import simpledb.TupleDesc;
+import simpledb.Type;
 
 public class SampleData {
 	static TupleDesc getSchoolTupleDesc() {

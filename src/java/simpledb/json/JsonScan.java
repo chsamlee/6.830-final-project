@@ -1,27 +1,12 @@
 package simpledb.json;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
-import simpledb.Catalog;
-import simpledb.Database;
-import simpledb.DbException;
-import simpledb.IntField;
-import simpledb.OpIterator;
-import simpledb.StringField;
-import simpledb.TransactionAbortedException;
-import simpledb.TransactionId;
-import simpledb.Tuple;
-import simpledb.TupleDesc;
-import simpledb.Type;
-
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Map;
+import com.google.gson.*;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.NoSuchElementException;
-import java.util.Queue;
+
+import org.omg.CORBA.PRIVATE_MEMBER;
+
+import simpledb.*;
 
 public class JsonScan implements OpIterator {
 
@@ -119,6 +104,7 @@ public class JsonScan implements OpIterator {
         			Type pKeyType = catalog.getTupleDesc(referredTable).getFieldType(pKeyIndex);
         			if(pKeyType == Type.INT_TYPE) {
         				if(!matchingElement.getAsJsonPrimitive().isNumber()) {
+                    		// TODO: It seems like the user thought the primary key was a string. So suggest a schema update to make the first string field the primary key, if one exists.
                             throw new IllegalArgumentException("Unknown data type");
         				}
         				tup.setField(i, new IntField(matchingElement.getAsJsonPrimitive().getAsInt()));
@@ -130,14 +116,6 @@ public class JsonScan implements OpIterator {
             	
             	// Got object
             	else if(matchingElement.isJsonObject()) {
-	            		
-	                /**
-	                 *  TODO: handle array case
-	                 *  Suppose we have 2 tables A and B. If B.a is a foreign key to A.a and we
-	                 *  want to insert {'a': 1, 'b': [1,2]} into A, ideally we insert 1 row into
-	                 *  A, 2 rows into B and link the 2 rows in B to the row in A. However the
-	                 *  current implementation ignores 'b' entirely.
-	                 */
 	                JsonObject val = matchingElement.getAsJsonObject();
 	                // recursively process references
 	                int refTable = refs.get(i);
@@ -150,6 +128,7 @@ public class JsonScan implements OpIterator {
             	
             	// Got something else
             	else {
+            		// TODO: If this is an array, it seems like the user thought a 1-1 was a 1-many. So suggest a schema update.
                     throw new IllegalArgumentException("Unknown data type");
             	}
             }
@@ -171,6 +150,8 @@ public class JsonScan implements OpIterator {
             	
             	// Got anything else
                 else {
+                	// TODO: If this is an object, it seems the user thought this was a foreign key, but it's not. Suggest this field should be a foreign key.
+                	// TODO: If this is an array, it seems the user thinks there's a foreign key that points here. Try inserting these in another table, and use this field as some aggregate, like a count.
                     throw new IllegalArgumentException("Unknown data type");
                 }
             }
@@ -193,6 +174,8 @@ public class JsonScan implements OpIterator {
             	
             	// Got anything else
                 else {
+                	// TODO: If this is an object, it seems the user thought this was a foreign key, but it's not. Suggest this field should be a foreign key.
+                	// TODO: If this is an array, it seems the user thinks there's a foreign key that points here. Try inserting these in another table, and use this field as some aggregate.
                     throw new IllegalArgumentException("Unknown data type");
                 }
             }
@@ -201,6 +184,7 @@ public class JsonScan implements OpIterator {
         // Expected nothing
         for(Entry<String, JsonElement> unmatchedEntry : matching.unusedKeyValues()) {
         	JsonElement element = unmatchedEntry.getValue();
+        	String key = unmatchedEntry.getKey();
         	// Got any primitive
         	if(element.isJsonPrimitive()) {
         		logExtraField(element);
@@ -209,17 +193,48 @@ public class JsonScan implements OpIterator {
         	// Got an object
         	if(element.isJsonObject()) {
         		for(Iterator<Integer> tableIdIter = catalog.tableIdIterator(); tableIdIter.hasNext();) {
-        			int nextTable = tableIdIter.next();
-        			if(catalog.getTableName(nextTable) == "") {
-        				
+        			int foreignTable = tableIdIter.next();
+        			if(KeyMatching.matchesApproximately(catalog.getTableName(foreignTable), key)) {
+	        			Map<Integer, Integer> foreignKeys = catalog.getForeignKeys(foreignTable);
+	        			if(foreignKeys.containsValue(table)) {
+	        				// If we get here, there exists a table with a name like this attribute, that has a foreign key back to
+	        				// this table. So try to insert this object in that table, after ensuring the foreign key points to this object.
+	        				// This is a 1-1 relationship.
+	        				Integer localPrimaryKeyIndex = td.fieldNameToIndex(catalog.getPrimaryKey(table));
+	        				Field primaryKeyField = tup.getField(localPrimaryKeyIndex);
+	    	                JsonObject val = element.getAsJsonObject();
+	    	                String foreignKey = catalog.getTupleDesc(foreignTable).getFieldName((getKeyByValue(foreignKeys, table)));
+	    	                val.add(foreignKey, fieldToPrimitive(primaryKeyField));
+	    	                // recursively process references
+	    	                jsonObjectToTuple(val, foreignTable);
+		        			break;
+	        			}
         			}
-        			Map<Integer, Integer> foreignKeys = catalog.getForeignKeys(nextTable);
-        			for(Entry<Integer, Integer> foreignKey : foreignKeys.entrySet()) {
-        				if(foreignKey.getValue()==table) {
-        					
-        				}
+        		}
+        	}
+        	
+        	// Got an array
+        	else if(element.isJsonArray()) {
+        		for(Iterator<Integer> tableIdIter = catalog.tableIdIterator(); tableIdIter.hasNext();) {
+        			int foreignTable = tableIdIter.next();
+        			if(KeyMatching.matchesApproximately(catalog.getTableName(foreignTable), key) || KeyMatching.matchesApproximately(catalog.getTableName(foreignTable), key+"s")) {
+	        			Map<Integer, Integer> foreignKeys = catalog.getForeignKeys(foreignTable);
+	        			if(foreignKeys.containsValue(table)) {
+	        				// If we get here, there exists a table with a name like this attribute, that has a foreign key back to
+	        				// this table. So try to insert all objects in the array into that table, after ensuring the foreign keys point to this object.
+	        				// This is a 1-many relationship.
+			        		for(JsonElement arrayElement : element.getAsJsonArray()) {
+		        				Integer localPrimaryKeyIndex = td.fieldNameToIndex(catalog.getPrimaryKey(table));
+		        				Field primaryKeyField = tup.getField(localPrimaryKeyIndex);
+		        				if(arrayElement.isJsonObject()) {
+		        					JsonObject val = arrayElement.getAsJsonObject();
+		        					String foreignKey = catalog.getTupleDesc(foreignTable).getFieldName((getKeyByValue(foreignKeys, table)));
+		        					val.add(foreignKey, fieldToPrimitive(primaryKeyField));
+		        				}
+			        		}
+							jsonArrayToTuple(element.getAsJsonArray(), foreignTable);
+	        			}
         			}
-        			//foreignKeys.
         		}
         	}
         }
@@ -229,13 +244,45 @@ public class JsonScan implements OpIterator {
         Tuple infoTup = new Tuple(infoTd);
         infoTup.setField(0, new IntField(table));
         Tuple mergedTup = Tuple.merge(tup, infoTup);
-        // append to buffer - we do this as a side effect to make recusion easier
+        // append to buffer - we do this as a side effect to make recursion easier
         tupBuffer.add(mergedTup);
         return mergedTup;
+    }
+    
+    private List<Tuple> jsonArrayToTuple(JsonArray array, int table) {
+        Catalog catalog = Database.getCatalog();
+        TupleDesc td = catalog.getTupleDesc(table);
+
+    	List<Tuple> tuples = new ArrayList<Tuple>();
+		for(JsonElement arrayElement : array) {
+			if(arrayElement.isJsonObject()) {
+				JsonObject object = arrayElement.getAsJsonObject();
+				tuples.add(jsonObjectToTuple(object, table));
+			}
+		}
+		return tuples;
     }
 
 	private void logExtraField(JsonElement element) {
 		// TODO Auto-generated method stub
 	}
 
+	public static <T,E> T getKeyByValue(Map<T, E> map, E value) {
+	    for (Entry<T, E> entry : map.entrySet()) {
+	        if (Objects.equals(value, entry.getValue())) {
+	        	return entry.getKey();
+	        }
+	    }
+	    return null;
+	}
+	
+	private static JsonPrimitive fieldToPrimitive(Field field) {
+		switch(field.getType()) {
+		case INT_TYPE:
+			return new JsonPrimitive(((IntField)field).getValue());
+		case STRING_TYPE:
+			return new JsonPrimitive(((StringField)field).getValue());
+		}
+		return null;
+	}
 }

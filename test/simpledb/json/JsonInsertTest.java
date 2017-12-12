@@ -1,4 +1,4 @@
-package simpledb;
+package simpledb.json;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -6,6 +6,17 @@ import com.google.gson.JsonPrimitive;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
+import simpledb.Catalog;
+import simpledb.Database;
+import simpledb.HeapFile;
+import simpledb.HeapPageId;
+import simpledb.IntField;
+import simpledb.SeqScan;
+import simpledb.TransactionId;
+import simpledb.Tuple;
+import simpledb.TupleDesc;
+import simpledb.Type;
 import simpledb.json.JsonInsert;
 
 import java.io.File;
