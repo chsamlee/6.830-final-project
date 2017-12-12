@@ -93,6 +93,20 @@ public class JsonScan implements OpIterator {
 
             JsonElement matchingElement = matching.getMatchingKey(fieldName, fieldType);
 
+            // If nothing matched, guess and move on.
+            if(matchingElement ==  null) {
+            	switch (fieldType) {
+				case INT_TYPE:
+					tup.setField(i, new IntField(guessInt()));
+					break;
+
+				case STRING_TYPE:
+					tup.setField(i, new StringField(guessString(), Type.STRING_LEN));
+					break;
+				}
+            	continue;
+            }
+            
             // Expecting an object
             if (refs.containsKey(i)) {
             	
@@ -144,7 +158,8 @@ public class JsonScan implements OpIterator {
 	                
 	                // Got string
 	                else if (val.isString()) {
-	                    tup.setField(i, new IntField(Integer.parseInt(val.getAsString())));
+	                	Scanner in = new Scanner(val.getAsString()).useDelimiter("[^0-9]+");
+	                    tup.setField(i, new IntField(in.nextInt()));
 	                }
             	}
             	
@@ -248,7 +263,15 @@ public class JsonScan implements OpIterator {
         return mergedTup;
     }
     
-    private List<Tuple> jsonArrayToTuple(JsonArray array, int table) {
+    private int guessInt() {
+    	return 0;
+	}
+
+	private String guessString() {
+		return "";
+	}
+
+	private List<Tuple> jsonArrayToTuple(JsonArray array, int table) {
         Catalog catalog = Database.getCatalog();
         TupleDesc td = catalog.getTupleDesc(table);
 
