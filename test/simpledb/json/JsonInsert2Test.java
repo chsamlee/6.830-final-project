@@ -1,13 +1,15 @@
-package simpledb;
+package simpledb.json;
 
 import org.junit.*;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 import java.io.*;
 import com.google.gson.*;
 
-public class DummyTest {
+import simpledb.*;
+
+public class JsonInsert2Test {
 	
 	private static TransactionId tid;
 
@@ -90,141 +92,149 @@ public class DummyTest {
 		    	   + "  year: 1"
 		    	   + "}";
     	JsonParser parser = new JsonParser();
-    	JsonElement element = parser.parse(jsonStr).getAsJsonObject();
+    	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     }
 
     @Test
     public void abbreviatedFieldNamesTest() {
-    	/* Insert to students
-    	 * { first: "John",
-    	 *   last: "Doe",
-    	 *   year: 1,
-    	 *   s_id: 3
-    	 * }
-    	 */
+    	String jsonStr = "{ first: 'John',"
+    					+"	last: 'Doe',"
+    					+"	year: 1,"
+    					+"	s_id: 3"
+				 		+"}";
+    	JsonParser parser = new JsonParser();
+    	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
+    	JsonScan scan = new JsonScan(new TransactionId(), object, 0);
+    	try {
+    		Tuple next = scan.next();
+    	} catch(Exception e)
+    	{
+    		e.printStackTrace();
+    		fail();
+    	}
     }
 
     @Test
     public void missingFieldsTest() {
-    	/* Insert to students
-    	 * { firstname: "John",
-    	 *   lastname: "Doe",
-    	 *   year: 1
-    	 * }
-    	 */
+    	String jsonStr = "{ firstname: 'John',"
+    	 +"lastname: 'Doe',"
+    	 +"year: 1"
+    	 +"}";
+    	JsonParser parser = new JsonParser();
+    	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     }
 
     @Test
     public void stringToIntTest() {
-    	/* Insert to students
-    	 * { firstname: "John",
-    	 *   lastname: "Doe",
-    	 *   year: "1st"
-    	 * }
-    	 */
+    	String jsonStr = "{ firstname: 'John',"
+    			+"lastname: 'Doe',"
+    	 +"year: '1st'"
+    	 +"}";
+    	JsonParser parser = new JsonParser();
+    	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     }
 
     @Test
     public void intToStringTest() {
-    	/* Insert to students
-    	 * { firstname: "John",
-    	 *   lastname: 3,
-    	 *   year: 2
-    	 * }
-    	 */
+    	String jsonStr = "{ firstname: 'John',"
+    	 +"lastname: 3,"
+    	 +"year: 2,"
+    	 +"}";
+    	JsonParser parser = new JsonParser();
+    	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     }
 
     @Test
     public void extraFieldsTest() {
-    	/* Insert to students
-    	 * { firstname: "John",
-    	 *   lastname: "Doe",
-    	 *   year: 1,
-    	 *   middle: "Batman",
-    	 *   school: 1
-    	 * }
-    	 */
+    	String jsonStr = "{ firstname: 'John',"
+    	 +"lastname: 'Doe',"
+    	 +"year: 1,"
+    	 +"middle: 'Batman',"
+    	 +"school: 1"
+    	 +"}";
+    	JsonParser parser = new JsonParser();
+    	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     }
 
     @Test
     public void sameFielddTest() {
-    	/* Insert to students
-    	 * { firstname: "John",
-    	 *   lname: "Glenn",
-    	 *   last: "Doe",
-    	 *   year: 1,
-    	 *   school: 1
-    	 * }
-    	 */
+    	String jsonStr = "{ firstname: 'John',"
+    	 +"lname: 'Glenn',"
+    	 +"last: 'Doe',"
+    	 +"year: 1,"
+    	 +"school: 1"
+    	 +"}";
+    	JsonParser parser = new JsonParser();
+    	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     }
 
     @Test
     public void nestedNewObjectTest() {
-    	/* Insert to students
-    	 * { firstname: "John",
-    	 *   lastname: "Doe",
-    	 *   year: 1,
-    	 *   middle: "Batman",
-    	 *   school: {
-    	 *   	name: "CMU",
-    	 *   	city: {
-    	 *   		name: "Pittsburgh"
-    	 *   		state: "PA"
-    	 *   	}
-    	 *   }
-    	 * }
-    	 */
+    	String jsonStr = "{ firstname: 'John',"
+    	 +"lastname: 'Doe',"
+    	 +"year: 1,"
+    	 +"middle: 'Batman',"
+    	 +"school: {"
+    	 	+"name: 'CMU',"
+    	 	+"city: {"
+    	 		+"name: 'Pittsburgh',"
+	 			+"state: 'PA'"
+ 			+"}"
+    	 +"}"
+    	 +"}";
+    	JsonParser parser = new JsonParser();
+    	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     }
 
     @Test
     public void nestedExistingObjectTest() {
-    	/* Insert to students
-    	 * { firstname: "John",
-    	 *   lastname: "Doe",
-    	 *   year: 1,
-    	 *   school: {
-    	 *   	name: "MIT"
-    	 *   }
-    	 * }
-    	 */
+    	String jsonStr = "{ firstname: 'John',"
+    	 +"lastname: 'Doe',"
+    	 +"year: 1,"
+    	 +"school: {"
+    	 	+"name: 'MIT'"
+    	 +"}"
+    	 +"}";
+    	JsonParser parser = new JsonParser();
+    	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     }
     
     @Test
     public void arrayOfObjectsTest() {
-    	/* Insert to schools
-    	 * [{
-    	 *	name: "University of Arizona",
-    	 *	city: {
-    	 *		name: "Tucson",
-    	 *		state: "AZ"
-    	 *  }
-    	 * },{
-    	 *	name: "Georgia Tech",
-    	 *	city: {
-    	 *		name: "Atlanta",
-    	 *		state: "GA"
-    	 *  }
-    	 * },{
-    	 *	name: "Emory",
-    	 *	city: {
-    	 *		name: "Atlanta",
-    	 *		state: "GA"
-    	 *  }
-    	 * },{
-    	 *	name: "Stanford",
-    	 *	city: {
-    	 *		name: "Stanford",
-    	 *		state: "CA"
-    	 *  }
-    	 * },{
-    	 *	name: "Caltech",
-    	 *	city: {
-    	 *		name: "Pasadena",
-    	 *		state: "CA"
-    	 *  }
-    	 * },
-    	 * ]
-    	 */
+    	String jsonStr = "[{"
+    	 +"name: 'University of Arizona',"
+    	 +"city: {"
+    	 +	"name: 'Tucson',"
+    	 +"		state: 'AZ'"
+    	 +"  }"
+    	 +" },{"
+    	 +"	name: 'Georgia Tech',"
+    	 +"	city: {"
+    	 +"		name: 'Atlanta',"
+    	 +"		state: 'GA'"
+    	 +"  }"
+    	 +" },{"
+    	 +"	name: 'Emory',"
+    	 +"	city: {"
+    	 +"		name: 'Atlanta',"
+    	 +"		state: 'GA'"
+    	 +"  }"
+    	 +" },{"
+    	 +"	name: 'Stanford',"
+    	 +"	city: {"
+    	 +"		name: 'Stanford',"
+    	 +"		state: 'CA'"
+    	 +"  }"
+    	 +" },{"
+    	 +"	name: 'Caltech',"
+    	 +"	city: {"
+    	 +"		name: 'Pasadena',"
+    	 +"		state: 'CA'"
+    	 +"  }"
+    	 +" },"
+    	 +" ]";
+    	JsonParser parser = new JsonParser();
+    	JsonArray array = parser.parse(jsonStr).getAsJsonArray();
     }
     
     @After
