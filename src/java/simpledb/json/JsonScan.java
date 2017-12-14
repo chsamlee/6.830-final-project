@@ -84,9 +84,9 @@ public class JsonScan implements OpIterator {
         Map<Integer, Integer> refs = catalog.getForeignKeys(table);
 
         Tuple tup = new Tuple(td);
-        
+
         KeyMatching matching = new KeyMatching(obj);
-        
+
         for (int i = 0; i < td.numFields(); i++) {
             String fieldName = td.getFieldName(i);
             Type fieldType = td.getFieldType(i);
@@ -106,10 +106,10 @@ public class JsonScan implements OpIterator {
 				}
             	continue;
             }
-            
+
             // Expecting an object
             if (refs.containsKey(i)) {
-            	
+
         		// Got primitive
             	if(matchingElement.isJsonPrimitive()) {
         			int referredTable = refs.get(i);
@@ -127,7 +127,7 @@ public class JsonScan implements OpIterator {
         				tup.setField(i, new StringField(matchingElement.getAsJsonPrimitive().getAsString(), Type.STRING_LEN));
         			}
         		}
-            	
+
             	// Got object
             	else if(matchingElement.isJsonObject()) {
 	                JsonObject val = matchingElement.getAsJsonObject();
@@ -139,7 +139,7 @@ public class JsonScan implements OpIterator {
 	                int refColumn = refTd.fieldNameToIndex(catalog.getPrimaryKey(refTable));
 	                tup.setField(i, refTuple.getField(refColumn));
 	            }
-            	
+
             	// Got something else
             	else {
             		// TODO: If this is an array, it seems like the user thought a 1-1 was a 1-many. So suggest a schema update.
@@ -150,19 +150,19 @@ public class JsonScan implements OpIterator {
             else if(fieldType == Type.INT_TYPE) {
             	if(matchingElement.isJsonPrimitive()) {
 	                JsonPrimitive val = matchingElement.getAsJsonPrimitive();
-	                
+
 	                // Got number
 	                if (val.isNumber()) {
 	                    tup.setField(i, new IntField(val.getAsInt()));
 	                }
-	                
+
 	                // Got string
 	                else if (val.isString()) {
 	                	Scanner in = new Scanner(val.getAsString()).useDelimiter("[^0-9]+");
 	                    tup.setField(i, new IntField(in.nextInt()));
 	                }
             	}
-            	
+
             	// Got anything else
                 else {
                 	// TODO: If this is an object, it seems the user thought this was a foreign key, but it's not. Suggest this field should be a foreign key.
@@ -170,23 +170,23 @@ public class JsonScan implements OpIterator {
                     throw new IllegalArgumentException("Unknown data type");
                 }
             }
-            
+
             // Expecting a string
             else if(fieldType == Type.STRING_TYPE){
             	if(matchingElement.isJsonPrimitive()) {
 	                JsonPrimitive val = matchingElement.getAsJsonPrimitive();
-	                
+
 	                // Got a string
 	                if (val.isString()) {
 	                    tup.setField(i, new StringField(val.getAsString(), Type.STRING_LEN));
 	                }
-	                
+
 	                // Got another primitive
 	                else {
 	                    tup.setField(i, new StringField(val.toString(), Type.STRING_LEN));
 	                }
             	}
-            	
+
             	// Got anything else
                 else {
                 	// TODO: If this is an object, it seems the user thought this was a foreign key, but it's not. Suggest this field should be a foreign key.
@@ -195,16 +195,26 @@ public class JsonScan implements OpIterator {
                 }
             }
         }
-        
+
         // Expected nothing
+		int pkeyIndex = catalog.getTupleDesc(table).fieldNameToIndex(catalog.getPrimaryKey(table));
+        String extrasTableName = "$" + catalog.getTableName(table) + "_extras";
+
         for(Entry<String, JsonElement> unmatchedEntry : matching.unusedKeyValues()) {
         	JsonElement element = unmatchedEntry.getValue();
         	String key = unmatchedEntry.getKey();
         	// Got any primitive
         	if(element.isJsonPrimitive()) {
-        		logExtraField(element);
+        	    // create tuple to be inserted in extras tabbler
+                int extrasTableId = catalog.getTableId(extrasTableName);
+        	    Tuple extrasTup = new Tuple(catalog.getTupleDesc(extrasTableId));
+        	    extrasTup.setField(0, tup.getField(pkeyIndex));
+        	    extrasTup.setField(1, new StringField(key, Type.STRING_LEN));
+        	    extrasTup.setField(2, new StringField(element.getAsJsonPrimitive().getAsString(), Type.STRING_LEN));
+        	    // insert into extras table
+        		logExtraField(extrasTup, extrasTableId);
         	}
-        	
+
         	// Got an object
         	if(element.isJsonObject()) {
         		for(Iterator<Integer> tableIdIter = catalog.tableIdIterator(); tableIdIter.hasNext();) {
@@ -227,7 +237,7 @@ public class JsonScan implements OpIterator {
         			}
         		}
         	}
-        	
+
         	// Got an array
         	else if(element.isJsonArray()) {
         		for(Iterator<Integer> tableIdIter = catalog.tableIdIterator(); tableIdIter.hasNext();) {
@@ -262,7 +272,7 @@ public class JsonScan implements OpIterator {
         tupBuffer.add(mergedTup);
         return mergedTup;
     }
-    
+
     private int guessInt() {
     	return 0;
 	}
@@ -285,8 +295,11 @@ public class JsonScan implements OpIterator {
 		return tuples;
     }
 
-	private void logExtraField(JsonElement element) {
-		// TODO Auto-generated method stub
+	private void logExtraField(Tuple tup, int extraTableId) {
+        Tuple infoTup = new Tuple(tableToInsertIntoDesc);
+        infoTup.setField(0, new IntField(extraTableId));
+        Tuple mergedTup = Tuple.merge(tup, infoTup);
+        tupBuffer.add(mergedTup);
 	}
 
 	public static <T,E> T getKeyByValue(Map<T, E> map, E value) {
@@ -297,7 +310,7 @@ public class JsonScan implements OpIterator {
 	    }
 	    return null;
 	}
-	
+
 	private static JsonPrimitive fieldToPrimitive(Field field) {
 		switch(field.getType()) {
 		case INT_TYPE:

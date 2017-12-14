@@ -75,7 +75,7 @@ public class JsonInsertTest {
 
     @After
     public void tearDown() throws Exception {
-        for (String name : new String[]{"tableA", "tableB"}) {
+        for (String name : new String[]{"tableA", "tableB", "$tableA_extras", "$tableB_extras"}) {
             // discard the pages
             HeapFile hf = (HeapFile) catalog.getDatabaseFile(catalog.getTableId(name));
             for (int pg = 0; pg < hf.numPages(); pg++) {

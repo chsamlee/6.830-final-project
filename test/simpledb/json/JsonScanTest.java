@@ -166,12 +166,21 @@ public class JsonScanTest {
     	JsonParser parser = new JsonParser();
     	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     	JsonScan scan = new JsonScan(new TransactionId(), object, catalog.getTableId("students"));
-		Tuple record = scan.next();
-		assertEquals(record.getField(0), new IntField(6));
-		assertEquals(record.getField(1), new StringField("John", Type.STRING_LEN));
-		assertEquals(record.getField(2), new StringField("Doe", Type.STRING_LEN));
-		assertEquals(record.getField(3), new IntField(1));
-		assertEquals(record.getField(4), new IntField(1));
+    	for (int i = 0; i < 2; i++) {
+			Tuple record = scan.next();
+			if (record.getTupleDesc().numFields() == 6) {
+				assertEquals(record.getField(0), new IntField(6));
+				assertEquals(record.getField(1), new StringField("John", Type.STRING_LEN));
+				assertEquals(record.getField(2), new StringField("Doe", Type.STRING_LEN));
+				assertEquals(record.getField(3), new IntField(1));
+				assertEquals(record.getField(4), new IntField(1));
+			}
+			else if (record.getTupleDesc().numFields() == 4) {
+				assertEquals(record.getField(0), new IntField(6));
+				assertEquals(record.getField(1), new StringField("middle", Type.STRING_LEN));
+				assertEquals(record.getField(2), new StringField("Batman", Type.STRING_LEN));
+			}
+		}
     }
 
     @Test
@@ -187,6 +196,10 @@ public class JsonScanTest {
     	JsonObject object = parser.parse(jsonStr).getAsJsonObject();
     	JsonScan scan = new JsonScan(new TransactionId(), object, catalog.getTableId("students"));
 		Tuple record = scan.next();
+		while (record.getTupleDesc().numFields() == 4) {
+			// skip the extra field tuple
+			record = scan.next();
+		}
 		assertEquals(record.getField(0), new IntField(7));
 		assertEquals(record.getField(1), new StringField("John", Type.STRING_LEN));
 		assertEquals(record.getField(2), new StringField("Glenn", Type.STRING_LEN));
@@ -200,7 +213,6 @@ public class JsonScanTest {
 					   	+"  firstname: 'John',"
 					   	+"  lastname: 'Doe',"
 					   	+"  year: 1,"
-					   	+"  middle: 'Batman',"
 					   	+"  school: {"
 					   	+"		id: 5,"
 					   	+"  	name: 'CMU',"
